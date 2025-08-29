@@ -1,0 +1,60 @@
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - catalog_data:/app/data
+      - ./catalog_local:/app/catalog_local
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    volumes:
+      - .:/app
+      - catalog_data:/app/data
+      - ./catalog_local:/app/catalog_local
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    command: arq worker.worker_settings.WorkerSettings
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      - api
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+volumes:
+  catalog_data:
