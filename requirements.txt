@@ -9,3 +9,4 @@ httpx
 jsonschema
 GitPython
 pyyaml
+python-multipart

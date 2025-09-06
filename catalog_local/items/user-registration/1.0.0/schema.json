@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "title": "Username",
+      "description": "Unique username for the new user",
+      "minLength": 3,
+      "maxLength": 20,
+      "pattern": "^[a-zA-Z0-9_]+$"
+    },
+    "email": {
+      "type": "string",
+      "title": "Email Address",
+      "description": "User's email address",
+      "format": "email"
+    },
+    "fullName": {
+      "type": "string",
+      "title": "Full Name",
+      "description": "User's full name"
+    },
+    "department": {
+      "type": "string",
+      "title": "Department",
+      "description": "User's department",
+      "enum": ["Engineering", "Marketing", "Sales", "Support", "HR", "Finance"]
+    },
+    "role": {
+      "type": "string",
+      "title": "User Role",
+      "description": "User's role in the system",
+      "enum": ["user", "admin", "manager"],
+      "default": "user"
+    },
+    "sendWelcomeEmail": {
+      "type": "boolean",
+      "title": "Send Welcome Email",
+      "description": "Send a welcome email to the new user",
+      "default": true
+    }
+  },
+  "required": ["username", "email", "fullName", "department"],
+  "additionalProperties": false
+}

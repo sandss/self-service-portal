@@ -25,8 +25,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include catalog router
+# Include catalog routers
 app.include_router(catalog_router)
+from .catalog.git_routes import router as git_routes
+from .catalog.bundle_routes import router as bundle_routes
+app.include_router(git_routes)
+app.include_router(bundle_routes)
 
 
 # Pydantic models

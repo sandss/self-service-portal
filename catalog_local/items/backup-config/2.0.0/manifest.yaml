@@ -1,0 +1,14 @@
+category: Network Management
+description: 'Enhanced version: Archive device configurations with scheduling and
+  encryption options.'
+displayName: Backup Device Configs
+entrypoint: task:run
+id: backup-config
+name: backup-config
+tags:
+- backup
+- configuration
+- network
+- automation
+- v2
+version: 2.0.0

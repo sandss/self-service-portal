@@ -1,0 +1,58 @@
+{
+  "devices": {
+    "ui:title": "Device List",
+    "ui:description": "Add network devices to backup configurations from",
+    "ui:options": {
+      "addable": true,
+      "removable": true,
+      "orderable": true,
+      "addLabel": "\u2795 Add Device",
+      "removeLabel": "\ud83d\uddd1\ufe0f Remove Device"
+    },
+    "items": {
+      "ui:placeholder": "Enter device hostname or IP address",
+      "ui:help": "Examples: router01.company.com, 192.168.1.1"
+    }
+  },
+  "bucket": {
+    "ui:title": "S3 Bucket Name",
+    "ui:placeholder": "my-backup-bucket",
+    "ui:help": "\u26a0\ufe0f Bucket must exist and be accessible"
+  },
+  "prefix": {
+    "ui:title": "Storage Prefix (Optional)",
+    "ui:placeholder": "backups/configs/",
+    "ui:help": "\ud83d\udca1 Leave empty for bucket root"
+  },
+  "schedule": {
+    "ui:title": "Backup Schedule",
+    "ui:widget": "select",
+    "ui:help": "\ud83d\udd52 Choose when to run automated backups",
+    "ui:enumNames": [
+      "Daily at 2 AM",
+      "Weekly (Sunday 2 AM)",
+      "Monthly (1st day 2 AM)",
+      "Manual Only"
+    ]
+  },
+  "encryption": {
+    "ui:title": "Enable AES-256 Encryption",
+    "ui:help": "\ud83d\udd12 Recommended for sensitive configuration data"
+  },
+  "retention": {
+    "ui:title": "Backup Retention (Days)",
+    "ui:help": "\ud83d\udcc5 Older backups will be automatically deleted"
+  },
+  "ui:order": [
+    "devices",
+    "bucket",
+    "prefix",
+    "schedule",
+    "encryption",
+    "retention"
+  ],
+  "ui:submitButtonOptions": {
+    "submitText": "\ud83d\ude80 Setup Enhanced Backup Task",
+    "norender": false
+  }
+}

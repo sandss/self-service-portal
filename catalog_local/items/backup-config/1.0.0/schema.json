@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["devices", "bucket"],
+  "properties": {
+    "devices": { "type": "array", "items": {"type":"string"}, "minItems": 1, "title": "Devices" },
+    "bucket":  { "type": "string", "title": "S3 Bucket" },
+    "prefix":  { "type": "string", "title": "Prefix", "default": "backups/" }
+  }
+}

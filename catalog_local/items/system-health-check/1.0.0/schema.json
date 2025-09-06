@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "properties": {
+    "services": {
+      "type": "array",
+      "title": "Services to Check",
+      "description": "List of services to include in health check",
+      "items": {
+        "type": "string",
+        "enum": ["api", "database", "cache", "queue", "storage", "auth", "monitoring"]
+      },
+      "default": ["api", "database", "cache"],
+      "minItems": 1
+    },
+    "includePerformance": {
+      "type": "boolean",
+      "title": "Include Performance Tests",
+      "description": "Run performance benchmarks in addition to health checks",
+      "default": false
+    },
+    "timeout": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "Maximum time to wait for each service check",
+      "default": 30,
+      "minimum": 5,
+      "maximum": 300
+    },
+    "alertThreshold": {
+      "type": "number",
+      "title": "Alert Threshold (%)",
+      "description": "Threshold for raising alerts (percentage of failed checks)",
+      "default": 20,
+      "minimum": 0,
+      "maximum": 100
+    }
+  },
+  "required": ["services"],
+  "additionalProperties": false
+}

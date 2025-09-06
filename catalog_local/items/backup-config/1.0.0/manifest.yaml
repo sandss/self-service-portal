@@ -1,0 +1,5 @@
+id: backup-config
+name: Backup Device Configs
+version: 1.0.0
+entrypoint: task:run
+description: "Demo: archive device configs."

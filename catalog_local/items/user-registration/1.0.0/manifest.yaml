@@ -1,0 +1,10 @@
+name: User Registration
+description: Register new users in the system with profile setup
+version: 1.0.0
+category: user-management
+tags:
+  - user
+  - registration
+  - onboarding
+author: System Admin
+created: "2024-01-15T10:00:00Z"

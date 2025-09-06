@@ -1,0 +1,11 @@
+name: System Health Check
+description: Comprehensive system health and performance check
+version: 1.0.0
+category: monitoring
+tags:
+  - health
+  - monitoring
+  - diagnostics
+  - performance
+author: DevOps Team
+created: "2024-01-15T11:00:00Z"

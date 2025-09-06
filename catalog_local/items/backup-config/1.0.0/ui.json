@@ -1,0 +1,46 @@
+{
+  "devices": {
+    "ui:title": "Device List",
+    "ui:description": "Add network devices to backup configurations from. You can specify hostnames, IP addresses, or FQDN.",
+    "ui:options": {
+      "addable": true,
+      "removable": true,
+      "orderable": true,
+      "addLabel": "➕ Add Device",
+      "removeLabel": "🗑️ Remove Device"
+    },
+    "items": {
+      "ui:placeholder": "Enter device hostname or IP address",
+      "ui:help": "Examples: router01.company.com, 192.168.1.1, switch-core-01",
+      "ui:options": {
+        "inputType": "text"
+      }
+    }
+  },
+  "bucket": {
+    "ui:title": "S3 Bucket Name",
+    "ui:description": "The S3 bucket where device configurations will be stored securely",
+    "ui:placeholder": "my-backup-bucket",
+    "ui:help": "⚠️ Bucket must already exist and be accessible with proper permissions",
+    "ui:options": {
+      "inputType": "text"
+    }
+  },
+  "prefix": {
+    "ui:title": "Storage Prefix (Optional)",
+    "ui:description": "Optional folder path within the bucket to organize backups",
+    "ui:placeholder": "backups/configs/",
+    "ui:help": "💡 Leave empty to store in bucket root. Use format: folder/subfolder/",
+    "ui:options": {
+      "inputType": "text"
+    }
+  },
+  "ui:order": ["devices", "bucket", "prefix"],
+  "ui:submitButtonOptions": {
+    "submitText": "🚀 Execute Backup Task",
+    "norender": false,
+    "props": {
+      "className": "submit-button"
+    }
+  }
+}

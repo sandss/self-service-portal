@@ -1,0 +1,260 @@
+/* RJSF Custom Styling - No Bootstrap Required */
+.rjsf {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Form container */
+.rjsf form {
+  display: block;
+}
+
+/* Field containers - RJSF generates divs with specific classes */
+.rjsf .field,
+.rjsf .field-string,
+.rjsf .field-array,
+.rjsf > div,
+.rjsf form > div {
+  margin-bottom: 1.5rem;
+}
+
+/* Labels - RJSF generates labels */
+.rjsf label {
+  display: block;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* Required indicator */
+.rjsf label .required::before {
+  content: "*";
+  color: #ef4444;
+  margin-right: 0.25rem;
+}
+
+/* All input types */
+.rjsf input,
+.rjsf textarea,
+.rjsf select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  background-color: #ffffff;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.rjsf input:focus,
+.rjsf textarea:focus,
+.rjsf select:focus {
+  outline: none;
+  border-color: #ea580c;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1), 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.rjsf input::placeholder,
+.rjsf textarea::placeholder {
+  color: #9ca3af;
+}
+
+/* Description text */
+.rjsf .field-description {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+/* Help text */
+.rjsf .help-block {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Error styling */
+.rjsf .field-error input,
+.rjsf .field-error textarea,
+.rjsf .field-error select {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.rjsf .error-detail {
+  color: #dc2626;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+/* Button base styling */
+.rjsf button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease-in-out;
+  text-decoration: none;
+  min-height: 2.5rem;
+}
+
+/* Primary/Add buttons - only the main array add button */
+.rjsf .array-item-add button,
+.rjsf button.btn-add {
+  background-color: #ea580c;
+  color: white;
+  border-color: #ea580c;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  position: relative;
+  min-width: 120px;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rjsf .array-item-add button:hover,
+.rjsf button.btn-add:hover {
+  background-color: #c2410c;
+  border-color: #c2410c;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Move up/down buttons should remain unstyled or get minimal styling */
+.rjsf .array-item button:not(.array-item-remove):not(:last-child) {
+  background-color: #6b7280;
+  color: white;
+  border-color: #6b7280;
+  min-width: auto;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.rjsf .array-item button:not(.array-item-remove):not(:last-child):hover {
+  background-color: #4b5563;
+  border-color: #4b5563;
+}
+
+/* Remove buttons */
+.rjsf button.array-item-remove {
+  background-color: #ef4444;
+  color: white;
+  border-color: #ef4444;
+  padding: 0.375rem 0.75rem;
+  min-height: 2rem;
+  position: relative;
+  min-width: 100px;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rjsf button.array-item-remove:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+
+/* Button SVG styling */
+.rjsf button svg {
+  flex-shrink: 0;
+}
+
+/* Submit button */
+.rjsf button[type="submit"] {
+  background-color: #ea580c;
+  color: white;
+  border-color: #ea580c;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  margin-top: 1.5rem;
+}
+
+.rjsf button[type="submit"]:hover {
+  background-color: #c2410c;
+  border-color: #c2410c;
+}
+
+/* Array field styling */
+.rjsf .field-array > .array-item-list {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background-color: #f9fafb;
+  margin-top: 0.5rem;
+}
+
+/* Individual array items */
+.rjsf .array-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background-color: white;
+  transition: all 0.15s ease-in-out;
+}
+
+.rjsf .array-item:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.rjsf .array-item > div:first-child {
+  flex: 1;
+}
+
+.rjsf .array-item button {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+/* Array add button container */
+.rjsf .array-item-add {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+/* Fieldset styling for complex objects */
+.rjsf fieldset {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  background-color: #fafafa;
+}
+
+.rjsf fieldset legend {
+  font-weight: 600;
+  color: #1f2937;
+  padding: 0 0.5rem;
+  background-color: white;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+/* Focus states for better accessibility */
+.rjsf .array-item:focus-within {
+  border-color: #ea580c;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+}
+
+/* Hide default RJSF submit button since we're providing our own */
+.rjsf form > div:last-child > button[type="submit"] {
+  display: none;
+}

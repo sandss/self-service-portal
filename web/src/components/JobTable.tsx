@@ -18,7 +18,7 @@ const JobTable = ({ jobs, loading, onRetryJob }: JobTableProps) => {
       case 'QUEUED':
         return 'bg-gray-100 text-gray-800';
       case 'RUNNING':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-orange-100 text-orange-800';
       case 'SUCCEEDED':
         return 'bg-green-100 text-green-800';
       case 'FAILED':
@@ -93,7 +93,7 @@ const JobTable = ({ jobs, loading, onRetryJob }: JobTableProps) => {
                 <div className="flex items-center">
                   <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-orange-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${job.progress}%` }}
                     ></div>
                   </div>
@@ -106,7 +106,7 @@ const JobTable = ({ jobs, loading, onRetryJob }: JobTableProps) => {
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                 <Link
                   to={`/jobs/${job.id}`}
-                  className="text-indigo-600 hover:text-indigo-900"
+                  className="text-orange-600 hover:text-orange-900"
                 >
                   View
                 </Link>

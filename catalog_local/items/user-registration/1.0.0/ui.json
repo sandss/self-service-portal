@@ -1,0 +1,21 @@
+{
+  "ui:order": ["username", "email", "fullName", "department", "role", "sendWelcomeEmail"],
+  "username": {
+    "ui:placeholder": "Enter username (letters, numbers, underscore only)"
+  },
+  "email": {
+    "ui:placeholder": "user@company.com"
+  },
+  "fullName": {
+    "ui:placeholder": "John Doe"
+  },
+  "department": {
+    "ui:widget": "select"
+  },
+  "role": {
+    "ui:widget": "radio"
+  },
+  "sendWelcomeEmail": {
+    "ui:widget": "checkbox"
+  }
+}

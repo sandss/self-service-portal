@@ -35,7 +35,7 @@ function Sidebar() {
     <div className="w-64 bg-white shadow-lg border-r border-gray-200 h-full">
       <div className="p-6">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
@@ -55,11 +55,11 @@ function Sidebar() {
                 to={item.path}
                 className={`flex items-center space-x-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                   location.pathname === item.path
-                    ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-700'
+                    ? 'bg-orange-50 text-orange-700 border-r-2 border-orange-700'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                <span className={location.pathname === item.path ? 'text-indigo-700' : 'text-gray-400'}>
+                <span className={location.pathname === item.path ? 'text-orange-700' : 'text-gray-400'}>
                   {item.icon}
                 </span>
                 <span>{item.label}</span>
@@ -81,7 +81,7 @@ function UserMenu() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
       >
-        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+        <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center">
           <span className="text-white text-sm font-medium">JD</span>
         </div>
         <div className="text-left">

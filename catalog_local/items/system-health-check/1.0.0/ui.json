@@ -1,0 +1,15 @@
+{
+  "ui:order": ["services", "includePerformance", "timeout", "alertThreshold"],
+  "services": {
+    "ui:widget": "checkboxes"
+  },
+  "includePerformance": {
+    "ui:widget": "checkbox"
+  },
+  "timeout": {
+    "ui:widget": "updown"
+  },
+  "alertThreshold": {
+    "ui:widget": "range"
+  }
+}

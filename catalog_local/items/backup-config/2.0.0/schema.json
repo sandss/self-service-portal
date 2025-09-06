@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "required": [
+    "devices",
+    "bucket"
+  ],
+  "properties": {
+    "devices": {
+      "type": "array",
+      "title": "Device List",
+      "description": "Network devices to backup configurations from",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9.-]+$"
+      },
+      "minItems": 1
+    },
+    "bucket": {
+      "type": "string",
+      "title": "S3 Bucket Name",
+      "description": "The S3 bucket where configurations will be stored",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "prefix": {
+      "type": "string",
+      "title": "Storage Prefix",
+      "description": "Optional folder path within the bucket",
+      "default": "backups/"
+    },
+    "schedule": {
+      "type": "string",
+      "title": "Backup Schedule",
+      "description": "Cron expression for automated backups",
+      "enum": [
+        "0 2 * * *",
+        "0 2 * * 0",
+        "0 2 1 * *",
+        "manual"
+      ],
+      "default": "manual"
+    },
+    "encryption": {
+      "type": "boolean",
+      "title": "Enable Encryption",
+      "description": "Encrypt backup files using AES-256",
+      "default": true
+    },
+    "retention": {
+      "type": "integer",
+      "title": "Retention Days",
+      "description": "Number of days to keep backups",
+      "minimum": 1,
+      "maximum": 365,
+      "default": 30
+    }
+  }
+}

@@ -245,9 +245,9 @@ const SelfService = ({ onJobCreated }: SelfServiceProps) => {
                   </select>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">What happens next?</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
+                <div className="bg-orange-50 border border-orange-200 rounded-md p-4">
+                  <h4 className="text-sm font-medium text-orange-900 mb-2">What happens next?</h4>
+                  <ul className="text-sm text-orange-800 space-y-1">
                     <li>• Server configuration will be validated</li>
                     <li>• Compute resources will be allocated</li>
                     <li>• Operating system and software will be installed</li>
