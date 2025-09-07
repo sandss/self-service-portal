@@ -66,17 +66,32 @@ export default function ImportCatalog({ onDone }: ImportCatalogProps) {
   };
 
   // GIT manual import
-  const [repoUrl, setRepoUrl] = useState("https://github.com/yourorg/catalog-repo.git");
-  const [ref, setRef] = useState("backup-config@1.2.0");
+  const [repoUrl, setRepoUrl] = useState("file:///app/mock-catalog-repos/ssl-certificate-check");
+  const [itemName, setItemName] = useState("ssl-certificate-check");
+  const [sourceType, setSourceType] = useState<"version" | "branch">("version");
+  const [version, setVersion] = useState("1.0.0");
+  const [branch, setBranch] = useState("main");
   
   const importGit = async () => {
     try {
       setLoading(true);
       setError("");
+      
+      const payload: any = {
+        repo_url: repoUrl,
+        item_name: itemName
+      };
+      
+      if (sourceType === "version") {
+        payload.version = version;
+      } else {
+        payload.branch = branch;
+      }
+      
       const r = await fetch(`${API}/catalog/git/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_url: repoUrl, ref })
+        body: JSON.stringify(payload)
       });
       if (!r.ok) {
         const errorText = await r.text();
@@ -198,27 +213,92 @@ export default function ImportCatalog({ onDone }: ImportCatalogProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Repository URL (HTTPS or SSH):
+              Repository URL (HTTPS, SSH, or file://):
             </label>
             <input
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               value={repoUrl}
               onChange={e => setRepoUrl(e.target.value)}
-              placeholder="https://github.com/yourorg/catalog-repo.git"
+              placeholder="file:///app/mock-catalog-repos/ssl-certificate-check"
             />
           </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tag (item@version):
+              Item Name:
             </label>
             <input
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              value={ref}
-              onChange={e => setRef(e.target.value)}
-              placeholder="backup-config@1.2.0"
+              value={itemName}
+              onChange={e => setItemName(e.target.value)}
+              placeholder="ssl-certificate-check"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              The catalog item identifier (used for bundle naming)
+            </p>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Source Type:
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="sourceType"
+                  value="version"
+                  checked={sourceType === "version"}
+                  onChange={e => setSourceType(e.target.value as "version" | "branch")}
+                  className="mr-2"
+                />
+                Version Tag
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="sourceType"
+                  value="branch"
+                  checked={sourceType === "branch"}
+                  onChange={e => setSourceType(e.target.value as "version" | "branch")}
+                  className="mr-2"
+                />
+                Branch
+              </label>
+            </div>
+          </div>
+
+          {sourceType === "version" ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Version Tag:
+              </label>
+              <input
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                value={version}
+                onChange={e => setVersion(e.target.value)}
+                placeholder="1.0.0"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Git tag for the specific version to import
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Branch Name:
+              </label>
+              <input
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                value={branch}
+                onChange={e => setBranch(e.target.value)}
+                placeholder="main"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Git branch to import from (uses latest commit)
+              </p>
+            </div>
+          )}
           
           <div className="bg-orange-50 border border-orange-200 rounded-md p-4">
             <h4 className="text-sm font-medium text-orange-900 mb-2">GitHub Webhook Setup</h4>
@@ -236,7 +316,9 @@ export default function ImportCatalog({ onDone }: ImportCatalogProps) {
           <button
             className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={importGit}
-            disabled={loading || !repoUrl.trim() || !ref.trim()}
+            disabled={loading || !repoUrl.trim() || !itemName.trim() || 
+              (sourceType === "version" && !version.trim()) || 
+              (sourceType === "branch" && !branch.trim())}
           >
             {loading ? "Importing..." : "Import from Git"}
           </button>

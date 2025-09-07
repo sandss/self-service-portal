@@ -416,3 +416,7 @@ cypress/screenshots/
 # Test results
 test-results/
 test-reports/
+
+# Catalog and data directories
+catalog_local/
+data/

@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "self-service-portal"
+version = "0.1.0"
+description = "A comprehensive self-service portal with catalog-driven job execution, real-time job monitoring, and detailed job tracking"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "api"}, {include = "worker"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.104.0"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+pydantic = "^1.10.0,<2.0"
+arq = "^0.25.0"
+redis = "^5.0.0"
+python-dotenv = "^1.0.0"
+jsonschema = "^4.19.0"
+gitpython = "^3.1.0"
+pyyaml = "^6.0.0"
+python-multipart = "^0.0.6"
+sqlalchemy = "^2.0.0"
+psycopg2-binary = "^2.9.0"
+alembic = "^1.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+httpx = "^0.25.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+start-api = "api.scripts:start_api"
+start-worker = "worker.scripts:start_worker"

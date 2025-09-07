@@ -68,8 +68,9 @@ def load_descriptor_from_temp(root: str):
     ui = json.load(open(ui_path)) if os.path.exists(ui_path) else {}
     
     # Minimal validation
-    for k in ("id", "version"):
-        if k not in manifest:
-            raise ValueError(f"manifest missing required field: {k}")
+    if "version" not in manifest:
+        raise ValueError("manifest missing required field: version")
+    if "id" not in manifest and "name" not in manifest:
+        raise ValueError("manifest missing required field: id or name")
     
     return manifest, schema, ui

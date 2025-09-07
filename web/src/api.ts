@@ -67,6 +67,26 @@ export const api = {
     return response.json();
   },
 
+  async deleteCatalogItem(itemId: string) {
+    const response = await fetch(`${API_BASE_URL}/catalog/${itemId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete catalog item: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  async deleteCatalogItemVersion(itemId: string, version: string) {
+    const response = await fetch(`${API_BASE_URL}/catalog/${itemId}/${version}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete catalog item version: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
   getWebSocketUrl() {
     const wsProtocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
     return `${wsProtocol}://${API_BASE_URL.replace(/^https?:\/\//, '')}/ws/jobs`;

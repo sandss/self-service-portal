@@ -32,6 +32,10 @@ from .catalog.bundle_routes import router as bundle_routes
 app.include_router(git_routes)
 app.include_router(bundle_routes)
 
+# Include admin routers
+from .admin.routes_catalog import router as admin_catalog_router
+app.include_router(admin_catalog_router)
+
 
 # Pydantic models
 class JobCreate(BaseModel):
@@ -124,7 +128,40 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
         if not (item_id and version):
             raise HTTPException(400, "item_id and version required for catalog")
         job = await arq_pool.enqueue_job("run_catalog_item", item_id=item_id, version=version, inputs=inputs, user_id=job_data.user_id)
-        await arq_pool.set(f"{settings.JOB_STATUS_PREFIX}{job.job_id}", json.dumps({"state": "QUEUED"}), ex=settings.JOB_TTL)
+        
+        # Create proper job status record for dashboard tracking
+        job_status = {
+            "id": job.job_id,
+            "state": "QUEUED",
+            "type": "catalog_execution",
+            "progress": 0,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "started_at": None,
+            "finished_at": None,
+            "params": {
+                "item_id": item_id,
+                "version": version,
+                "inputs": inputs,
+                "user_id": job_data.user_id
+            },
+            "result": None,
+            "error": None
+        }
+        
+        # Convert data to hash format (same as git import)
+        hash_data = {}
+        for key, value in job_status.items():
+            if value is None:
+                continue
+            elif key in ["params", "result", "error"]:
+                hash_data[key] = json.dumps(value)
+            else:
+                hash_data[key] = str(value)
+        
+        job_key = f"{settings.JOB_STATUS_PREFIX}{job.job_id}"
+        await arq_pool.hset(job_key, mapping=hash_data)
+        await arq_pool.expire(job_key, settings.JOB_TTL)
         return JobResponse(job_id=job.job_id)
     
     # Handle regular jobs

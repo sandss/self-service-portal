@@ -1,19 +1,31 @@
 FROM python:3.11-slim
 
-# Install build essentials and git
+# Install build essentials, git, and Poetry
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install poetry
+
+# Configure Poetry: don't create virtual env (we're in a container)
+ENV POETRY_VENV_IN_PROJECT=false \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache \
+    POETRY_VIRTUALENVS_CREATE=false
 
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Copy Poetry configuration
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies
+RUN poetry install --no-root --only=main && rm -rf $POETRY_CACHE_DIR
 
 # Copy application code
 COPY . .
 
 # Default command (will be overridden by compose)
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

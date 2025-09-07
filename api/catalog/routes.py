@@ -5,10 +5,13 @@ from ..deps import get_arq_pool
 from .registry import (
     list_items, list_versions, get_descriptor, resolve_latest, upsert_version,
     sync_registry_with_local, get_sync_status, migrate_legacy_local_storage,
-    sync_local_to_registry, sync_registry_to_local
+    sync_local_to_registry, sync_registry_to_local, _load, _save, _lock
 )
 from .bundles import load_descriptor_from_dir, pack_dir, write_blob
 from .validate import validate_manifest, validate_schema
+from ..common.db import SessionLocal
+from .repository import CatalogRepo
+from .models import CatalogItem, CatalogVersion
 import os, tempfile, json, yaml, shutil
 from datetime import datetime
 
@@ -410,3 +413,232 @@ def api_full_sync():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Full sync failed: {str(e)}")
+
+@router.delete("/{item_id}")
+def delete_catalog_item(item_id: str):
+    """Delete an entire catalog item (all versions) from registry, database, and storage"""
+    try:
+        deleted_count = 0
+        deleted_bundles = []
+        errors = []
+        
+        # Load current registry
+        with _lock:
+            db = _load()
+            
+            if item_id not in db.get("items", {}):
+                raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found")
+            
+            item_data = db["items"][item_id]
+            versions = list(item_data.get("versions", {}).keys())
+            
+            # Delete bundle files for each version
+            for version in versions:
+                version_data = item_data["versions"][version]
+                storage_uri = version_data.get("storage_uri")
+                
+                if storage_uri and os.path.exists(storage_uri):
+                    try:
+                        os.remove(storage_uri)
+                        deleted_bundles.append(storage_uri)
+                    except Exception as e:
+                        errors.append(f"Failed to delete bundle {storage_uri}: {str(e)}")
+                
+                # Also remove extracted files from catalog_local if they exist
+                local_path = os.path.join("/app/catalog_local/items", item_id, version)
+                if os.path.exists(local_path):
+                    try:
+                        import shutil
+                        shutil.rmtree(local_path)
+                        deleted_bundles.append(f"catalog_local: {local_path}")
+                    except Exception as e:
+                        errors.append(f"Failed to delete catalog_local {local_path}: {str(e)}")
+                
+                deleted_count += 1
+            
+            # Remove from JSON registry
+            del db["items"][item_id]
+            _save(db)
+        
+        # Remove from database if enabled
+        try:
+            with SessionLocal() as db_session:
+                # Get the catalog item
+                catalog_item = db_session.query(CatalogItem).filter(
+                    CatalogItem.item_id == item_id
+                ).first()
+                
+                if catalog_item:
+                    # Delete all versions first (foreign key constraint)
+                    db_session.query(CatalogVersion).filter(
+                        CatalogVersion.catalog_item_id == catalog_item.id
+                    ).delete()
+                    
+                    # Delete the item
+                    db_session.delete(catalog_item)
+                    db_session.commit()
+                
+        except Exception as e:
+            errors.append(f"Database deletion failed: {str(e)}")
+        
+        # Remove extracted item directory from catalog_local if it exists
+        item_dir = os.path.join("/app/catalog_local/items", item_id)
+        if os.path.exists(item_dir):
+            try:
+                import shutil
+                shutil.rmtree(item_dir)
+                deleted_bundles.append(f"item directory: {item_dir}")
+            except Exception as e:
+                errors.append(f"Failed to delete item directory {item_dir}: {str(e)}")
+        
+        # Remove individual registry file if it exists
+        individual_registry_file = f"/app/data/registry/{item_id}.json"
+        if os.path.exists(individual_registry_file):
+            try:
+                os.remove(individual_registry_file)
+            except Exception as e:
+                errors.append(f"Failed to delete individual registry file: {str(e)}")
+        
+        return {
+            "deleted": True,
+            "item_id": item_id,
+            "versions_deleted": deleted_count,
+            "bundles_deleted": deleted_bundles,
+            "errors": errors
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+@router.delete("/{item_id}/{version}")
+def delete_catalog_version(item_id: str, version: str):
+    """Delete a specific version of a catalog item from registry, database, and storage"""
+    try:
+        deleted_bundle = None
+        errors = []
+        
+        # Load current registry
+        with _lock:
+            db = _load()
+            
+            if item_id not in db.get("items", {}):
+                raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found")
+            
+            item_data = db["items"][item_id]
+            if version not in item_data.get("versions", {}):
+                raise HTTPException(status_code=404, detail=f"Version '{version}' not found for item '{item_id}'")
+            
+            version_data = item_data["versions"][version]
+            storage_uri = version_data.get("storage_uri")
+            
+            # Delete bundle file
+            if storage_uri and os.path.exists(storage_uri):
+                try:
+                    os.remove(storage_uri)
+                    deleted_bundle = storage_uri
+                except Exception as e:
+                    errors.append(f"Failed to delete bundle {storage_uri}: {str(e)}")
+            
+            # Also remove extracted files from catalog_local if they exist
+            local_path = os.path.join("/app/catalog_local/items", item_id, version)
+            if os.path.exists(local_path):
+                try:
+                    import shutil
+                    shutil.rmtree(local_path)
+                    if not deleted_bundle:
+                        deleted_bundle = f"catalog_local: {local_path}"
+                    else:
+                        deleted_bundle += f" and catalog_local: {local_path}"
+                except Exception as e:
+                    errors.append(f"Failed to delete catalog_local {local_path}: {str(e)}")
+            
+            # Remove version from JSON registry
+            del item_data["versions"][version]
+            
+            # If no versions left, remove the entire item
+            if not item_data["versions"]:
+                del db["items"][item_id]
+                item_removed = True
+                
+                # Also remove the entire item directory from catalog_local if it exists
+                item_dir = os.path.join("/app/catalog_local/items", item_id)
+                if os.path.exists(item_dir):
+                    try:
+                        import shutil
+                        shutil.rmtree(item_dir)
+                        deleted_bundle += f" and item directory: {item_dir}"
+                    except Exception as e:
+                        errors.append(f"Failed to delete item directory {item_dir}: {str(e)}")
+            else:
+                item_removed = False
+            
+            _save(db)
+        
+        # Remove from database if enabled
+        try:
+            with SessionLocal() as db_session:
+                # Get the catalog item
+                catalog_item = db_session.query(CatalogItem).filter(
+                    CatalogItem.item_id == item_id
+                ).first()
+                
+                if catalog_item:
+                    # Delete the specific version
+                    version_obj = db_session.query(CatalogVersion).filter(
+                        CatalogVersion.catalog_item_id == catalog_item.id,
+                        CatalogVersion.version == version
+                    ).first()
+                    
+                    if version_obj:
+                        db_session.delete(version_obj)
+                    
+                    # Check if there are any remaining versions
+                    remaining_versions = db_session.query(CatalogVersion).filter(
+                        CatalogVersion.catalog_item_id == catalog_item.id
+                    ).count()
+                    
+                    # If no versions left, delete the item too
+                    if remaining_versions == 0:
+                        db_session.delete(catalog_item)
+                    
+                    db_session.commit()
+                
+        except Exception as e:
+            errors.append(f"Database deletion failed: {str(e)}")
+        
+        # Update individual registry file if it exists
+        individual_registry_file = f"/app/data/registry/{item_id}.json"
+        if os.path.exists(individual_registry_file):
+            try:
+                with open(individual_registry_file, 'r') as f:
+                    individual_data = json.load(f)
+                
+                if version in individual_data.get("versions", {}):
+                    del individual_data["versions"][version]
+                    
+                    if not individual_data["versions"]:
+                        # Remove file if no versions left
+                        os.remove(individual_registry_file)
+                    else:
+                        # Update file with remaining versions
+                        with open(individual_registry_file, 'w') as f:
+                            json.dump(individual_data, f, indent=2)
+                            
+            except Exception as e:
+                errors.append(f"Failed to update individual registry file: {str(e)}")
+        
+        return {
+            "deleted": True,
+            "item_id": item_id,
+            "version": version,
+            "item_removed": item_removed,
+            "bundle_deleted": deleted_bundle,
+            "errors": errors
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")

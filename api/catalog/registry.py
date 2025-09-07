@@ -17,9 +17,14 @@ def _save(data: dict):
     with open(REGISTRY_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
+from api.common.db import SessionLocal
+from api.catalog.repository import CatalogRepo
+
 def upsert_version(item_id: str, version: str, manifest: dict, schema: dict, ui: dict|None,
                    storage_uri: str, source: dict):
+    # Legacy implementation with dual-write support
     with _lock:
+        # First, update JSON (source of truth)
         db = _load()
         items = db["items"].setdefault(item_id, {"versions": {}})
         items["versions"][version] = {
@@ -31,6 +36,31 @@ def upsert_version(item_id: str, version: str, manifest: dict, schema: dict, ui:
             "active": True
         }
         _save(db)
+        
+        # Then, dual-write to PostgreSQL if enabled
+        try:
+            with SessionLocal() as db_session:
+                repo = CatalogRepo(db=db_session)
+                repo.register_version(
+                    item_id=item_id,
+                    name=manifest.get("name", item_id),
+                    manifest=manifest,
+                    json_schema=schema,
+                    ui_schema=ui,
+                    version=version,
+                    storage_uri=storage_uri,
+                    source=source,
+                    is_active=True,
+                    labels=manifest.get("labels", {}),
+                    description=manifest.get("description")
+                )
+                print(f"✅ Successfully wrote {item_id} v{version} to database")
+        except Exception as e:
+            # Log error but don't fail the request since JSON write succeeded
+            print(f"❌ Failed to write {item_id} v{version} to database: {e}")
+            import traceback
+            traceback.print_exc()
+            # In production, you might want to use proper logging here
 
 def list_items() -> List[dict]:
     db = _load()
@@ -473,5 +503,38 @@ def sync_registry_to_local():
     return {"created": created, "errors": errors}
 
 def get_local_catalog_item_path(item_id: str, version: str) -> str:
-    """Get the local filesystem path for a catalog item version."""
-    return os.path.join(LOCAL_CATALOG_PATH, item_id, version)
+    """
+    Get path to catalog item, extracting from bundle if necessary.
+    
+    Priority:
+    1. Check if already extracted in catalog_local
+    2. Extract from bundle if exists
+    3. Raise error if neither found
+    """
+    import tarfile
+    
+    # Check if locally extracted version exists
+    local_path = os.path.join(LOCAL_CATALOG_PATH, item_id, version)
+    task_file = os.path.join(local_path, "task.py")
+    
+    if os.path.exists(task_file):
+        return local_path
+    
+    # Check if bundle exists and extract it
+    bundle_path = f"/app/data/bundles/{item_id}@{version}.tar.gz"
+    if os.path.exists(bundle_path):
+        print(f"📦 Extracting bundle {item_id}@{version} to catalog_local...")
+        os.makedirs(local_path, exist_ok=True)
+        
+        with tarfile.open(bundle_path, 'r:gz') as tar:
+            tar.extractall(local_path)
+        
+        # Verify extraction worked
+        if os.path.exists(task_file):
+            print(f"✅ Successfully extracted {item_id}@{version}")
+            return local_path
+        else:
+            raise FileNotFoundError(f"task.py not found in bundle {item_id}@{version}")
+    
+    # Neither local nor bundle found
+    raise FileNotFoundError(f"Catalog item {item_id}@{version} not found (checked local and bundles)")

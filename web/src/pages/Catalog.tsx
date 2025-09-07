@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Form from "@rjsf/core";
 import validator from "@rjsf/validator-ajv8";
 import ImportCatalog from "../components/ImportCatalog";
+import ConfirmationDialog from "../components/ConfirmationDialog";
+import { api } from "../api";
 import "../styles/rjsf-form.css";
 
 type Item = { id: string; versions: string[]; latest?: string };
@@ -20,9 +22,23 @@ export default function Catalog() {
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [error, setError] = useState<string>("");
   const [showImport, setShowImport] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    itemId?: string;
+    version?: string;
+    itemName?: string;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    isLoading: false
+  });
 
   useEffect(() => {
     console.log("Loading catalog items...");
+    loadCatalogItems();
+  }, []);
+
+  const loadCatalogItems = () => {
     fetch(`${API}/catalog`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -36,7 +52,7 @@ export default function Catalog() {
         console.error("Error loading catalog:", err);
         setError("Failed to load catalog items");
       });
-  }, []);
+  };
 
   useEffect(() => {
     if (!selected || !version) { 
@@ -179,6 +195,65 @@ export default function Catalog() {
     }
   };
 
+  const handleDeleteItem = (itemId: string, itemName: string) => {
+    setDeleteDialog({
+      isOpen: true,
+      itemId,
+      itemName,
+      isLoading: false
+    });
+  };
+
+  const handleDeleteVersion = (itemId: string, version: string, itemName: string) => {
+    setDeleteDialog({
+      isOpen: true,
+      itemId,
+      version,
+      itemName,
+      isLoading: false
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDialog.itemId) return;
+
+    setDeleteDialog(prev => ({ ...prev, isLoading: true }));
+    
+    try {
+      if (deleteDialog.version) {
+        // Delete specific version
+        await api.deleteCatalogItemVersion(deleteDialog.itemId, deleteDialog.version);
+        console.log(`Deleted version ${deleteDialog.version} of ${deleteDialog.itemId}`);
+      } else {
+        // Delete entire item
+        await api.deleteCatalogItem(deleteDialog.itemId);
+        console.log(`Deleted item ${deleteDialog.itemId}`);
+      }
+      
+      // Refresh catalog items
+      loadCatalogItems();
+      
+      // Reset selection if deleted item was selected
+      if (selected === deleteDialog.itemId) {
+        if (!deleteDialog.version || items.find(i => i.id === deleteDialog.itemId)?.versions.length === 1) {
+          setSelected("");
+          setVersion("");
+          setDescriptor(null);
+        }
+      }
+      
+      setDeleteDialog({ isOpen: false, isLoading: false });
+    } catch (err) {
+      console.error("Error deleting:", err);
+      setError(`Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setDeleteDialog(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteDialog({ isOpen: false, isLoading: false });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -236,10 +311,7 @@ export default function Catalog() {
                     setShowImport(false);
                     setError("");
                     // Refresh catalog items after successful import
-                    fetch(`${API}/catalog`)
-                      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-                      .then(d => setItems(d.items))
-                      .catch(err => console.error("Error refreshing catalog:", err));
+                    loadCatalogItems();
                   }}
                 />
               </div>
@@ -254,10 +326,32 @@ export default function Catalog() {
               {items.map(item => (
                 <div
                   key={item.id}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-orange-300 transition-all duration-200 cursor-pointer"
-                  onClick={() => setSelected(item.id)}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-orange-300 transition-all duration-200 relative group"
                 >
-                  <div className="p-6">
+                  {/* Delete button - only visible on hover */}
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteItem(item.id, item.id.split('-').map(word => 
+                            word.charAt(0).toUpperCase() + word.slice(1)
+                          ).join(' '));
+                        }}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete catalog item"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div 
+                    className="p-6 cursor-pointer"
+                    onClick={() => setSelected(item.id)}
+                  >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -317,12 +411,40 @@ export default function Catalog() {
                 {items.find(i => i.id === selected)?.versions.map(v => (
                   <div
                     key={v}
-                    className="border border-gray-200 rounded-lg p-4 hover:border-orange-300 hover:bg-orange-50 cursor-pointer transition-all"
-                    onClick={() => setVersion(v)}
+                    className="border border-gray-200 rounded-lg p-4 hover:border-orange-300 hover:bg-orange-50 transition-all relative group"
                   >
-                    <div className="font-medium text-gray-900">Version {v}</div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {v === "1.0.0" ? "Stable release" : "Latest version"}
+                    {/* Delete version button - only visible on hover */}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const item = items.find(i => i.id === selected);
+                          if (item && item.versions.length > 1) {
+                            handleDeleteVersion(selected, v, selected.split('-').map(word => 
+                              word.charAt(0).toUpperCase() + word.slice(1)
+                            ).join(' '));
+                          } else {
+                            setError("Cannot delete the last version of a catalog item. Delete the entire item instead.");
+                            setTimeout(() => setError(""), 5000);
+                          }
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Delete this version"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div 
+                      className="cursor-pointer"
+                      onClick={() => setVersion(v)}
+                    >
+                      <div className="font-medium text-gray-900">Version {v}</div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        {v === "1.0.0" ? "Stable release" : "Latest version"}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -425,6 +547,21 @@ export default function Catalog() {
             </div>
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmationDialog
+          isOpen={deleteDialog.isOpen}
+          onClose={cancelDelete}
+          onConfirm={confirmDelete}
+          title={deleteDialog.version ? "Delete Version" : "Delete Catalog Item"}
+          message={
+            deleteDialog.version
+              ? `Are you sure you want to delete version ${deleteDialog.version} of "${deleteDialog.itemName}"? This action cannot be undone.`
+              : `Are you sure you want to delete the entire catalog item "${deleteDialog.itemName}" and all its versions? This action cannot be undone.`
+          }
+          confirmText={deleteDialog.version ? "Delete Version" : "Delete Item"}
+          isLoading={deleteDialog.isLoading}
+        />
       </div>
     </div>
   );
