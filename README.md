@@ -13,36 +13,40 @@ A comprehensive self-service portal with catalog-driven job execution, real-time
 ## Architecture
 
 ```
-React Frontend (port 5173)
-    ↓ HTTP API calls + WebSocket
-FastAPI Server (port 8000)
-    ↓ Job enqueue & Catalog management
-ARQ Workers + Redis (port 6379)
-    ↓ Dynamic task execution & Pub/sub updates
-Catalog Items (catalog_local/)
-    ↓ Python task.py files loaded dynamically
-WebSocket → Frontend (real-time updates)
+Git Repositories → Import System → Bundle Storage → Execution System
+     ↓                ↓              ↓              ↓
+   Git Clone      ARQ Workers    .tar.gz files  catalog_local/
+     ↓                ↓              ↓              ↓
+React Frontend (port 5173) → FastAPI Server (port 8000) → Redis (port 6379)
+     ↓ HTTP API calls + WebSocket    ↓ Job enqueue & Catalog management    ↓
+WebSocket ← Real-time updates ← ARQ Workers ← Dynamic task execution ← task.py files
 ```
 
 ## Key Features
 
+### 🚀 **Git-Based Catalog Import**
+- Import catalog items directly from Git repositories (GitHub, GitLab, local)
+- Automatic version detection from Git tags and branches
+- Efficient bundle storage with on-demand extraction
+- Real-time import progress tracking with job dashboard
+
 ### 🎯 **Self-Service Catalog**
 - Browse and execute catalog items (infrastructure tasks, health checks, etc.)
 - Dynamic schema-driven forms with UI generation
-- Version management for catalog items
+- Multi-version support with hybrid storage system
 - Hot-reloading of task.py files (no restart required)
 
-### 📊 **Job Dashboard** 
-- Real-time job monitoring with auto-refresh
-- Detailed job pages with progress tracking
-- Job filtering, search, and pagination
+### 📊 **Comprehensive Job Dashboard** 
+- Real-time monitoring for both execution and import jobs
+- Detailed job pages with progress tracking and job type filtering
+- Job filtering, search, and pagination with type-specific views
 - Navigate between jobs list and individual job details
 
 ### ⚡ **Dynamic Execution**
-- Catalog items execute Python tasks dynamically
+- Hybrid bundle system: compressed storage + on-demand extraction
+- Catalog items execute Python tasks dynamically from extracted files
 - Progress callbacks for real-time updates
-- Robust error handling and retry logic
-- Input validation with JSON schemas
+- Robust error handling and retry logic with automatic cleanup
 
 ## Quick Start
 
@@ -98,10 +102,62 @@ WebSocket → Frontend (real-time updates)
    - Click "Seed Demo Jobs" to create 5 sample jobs
    - Or use the "Create New Job" form to enqueue individual jobs
 
-2. **Watch real-time updates:**
-   - Jobs progress from QUEUED → RUNNING → SUCCEEDED
-   - Progress bars update live via WebSocket
-   - State badges change color as jobs progress
+#### **Catalog Import System**
+
+The portal features a comprehensive Git-based catalog import system:
+
+1. **Import from Git repositories:**
+   ```bash
+   # Import from GitHub
+   curl -X POST "http://localhost:8000/catalog/git/import" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "repo_url": "https://github.com/user/my-catalog-item",
+       "item_name": "my-catalog-item",
+       "version": "1.2.3"
+     }'
+   
+   # Import from local repository
+   curl -X POST "http://localhost:8000/catalog/git/import" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "repo_url": "file:///app/mock-catalog-repos/ssl-certificate-check",
+       "item_name": "ssl-certificate-check",
+       "version": "1.2.3"
+     }'
+   ```
+
+2. **Import features:**
+   - **Git Integration**: Import directly from Git repositories using tags or branches
+   - **Bundle Storage**: Efficient compressed storage with on-demand extraction
+   - **Version Management**: Automatic version detection from Git tags
+   - **Job Tracking**: Real-time import progress with detailed status
+   - **Hybrid Execution**: Automatic extraction for execution with cleanup management
+
+3. **Repository Requirements:**
+   ```
+   your-catalog-item/
+   ├── manifest.yaml    # Required: Item metadata
+   ├── schema.json     # Required: Input validation schema  
+   ├── task.py         # Required: Execution logic
+   ├── ui.json         # Optional: UI form configuration
+   └── README.md       # Optional: Documentation
+   ```
+
+📚 **[Complete Import Documentation](docs/CATALOG_IMPORT.md)** - Detailed guide with examples, API reference, and troubleshooting.
+
+#### **Job Monitoring**  
+1. **Jobs Dashboard:**
+   - Click "Jobs" to view all jobs (both execution and import jobs)
+   - Real-time updates show job progress and state changes
+   - Filter by job type: `catalog_execution` or `git_import`
+   - Click on any job ID to view detailed information
+
+2. **Job Detail Pages:**
+   - View comprehensive job information (timeline, progress, results)
+   - Auto-refreshing for running jobs
+   - "Back to Jobs" button for easy navigation
+   - JSON display of input parameters and results
 
 3. **Interact with jobs:**
    - Filter by state (QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED)
@@ -291,10 +347,12 @@ pytest api/test_api.py -v
 ## Features
 
 ### Backend (FastAPI + ARQ + Catalog)
+- ✅ **Git-based Catalog Import**: Import catalog items directly from Git repositories
+- ✅ **Hybrid Bundle System**: Efficient compressed storage with on-demand extraction  
 - ✅ **Catalog System**: Dynamic Python task execution with hot-reload
 - ✅ **Schema Validation**: JSON Schema-based input validation  
-- ✅ **Version Management**: Multiple versions per catalog item
-- ✅ **Job Management**: Creation, listing, filtering, retry functionality
+- ✅ **Version Management**: Multiple versions per catalog item with Git tag integration
+- ✅ **Job Management**: Creation, listing, filtering, retry functionality with job type tracking
 - ✅ **Real-time Updates**: WebSocket + Redis pub/sub
 - ✅ **Progress Tracking**: Live progress updates with custom messages
 - ✅ **Error Handling**: Robust error handling with detailed job information
