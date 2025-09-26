@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useJobDetail } from '../hooks/useJobDetail';
+import { useJobDetailV2 } from '../hooks/useJobDetailV2';
 import { JobHeader } from '../components/JobHeader';
 import { JobSummaryCard } from '../components/JobSummaryCard';
 import { JobProgressSection } from '../components/JobProgressSection';
@@ -16,23 +16,24 @@ const JobDetail: React.FC = () => {
   const {
     job,
     loading,
+    loadingState,
     error,
     autoRefresh,
     retryCount,
-    isWaitingForJob,
     fetchJobDetail
-  } = useJobDetail(jobId);
+  } = useJobDetailV2(jobId);
 
   console.log('JobDetail component mounted, jobId:', jobId);
   console.log('Render state - loading:', loading, 'error:', error, 'job:', job ? 'present' : 'null');
 
   const handleBackClick = () => navigate('/');
   const handleRefresh = () => fetchJobDetail(false);
+  const handleRetry = () => fetchJobDetail(true);
 
   if (loading) {
     return (
       <JobLoading 
-        isWaitingForJob={isWaitingForJob}
+        loadingState={loadingState}
         retryCount={retryCount}
       />
     );
@@ -43,6 +44,7 @@ const JobDetail: React.FC = () => {
       <JobError 
         error={error}
         onBackClick={handleBackClick}
+        onRetry={handleRetry}
       />
     );
   }
