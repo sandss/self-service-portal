@@ -1,33 +1,11 @@
 import React from 'react';
+import { JsonViewer } from './JsonViewer';
 
 interface JobDataSectionProps {
   params?: any;
   result?: any;
   error?: any;
 }
-
-const JsonDataDisplay: React.FC<{ data: any; title: string; isError?: boolean }> = ({ 
-  data, 
-  title, 
-  isError = false 
-}) => {
-  if (!data) return null;
-  
-  const bgColor = isError ? 'bg-red-50' : 'bg-gray-50';
-  const borderColor = isError ? 'border-red-200' : '';
-  const textColor = isError ? 'text-red-700' : 'text-gray-700';
-  const titleColor = isError ? 'text-red-900' : 'text-gray-900';
-  const icon = isError ? '❌ ' : '';
-  
-  return (
-    <div className={`${bgColor} ${borderColor} rounded-lg p-4 mb-6`}>
-      <h4 className={`font-medium ${titleColor} mb-2`}>{icon}{title}</h4>
-      <pre className={`text-sm ${textColor} overflow-x-auto whitespace-pre-wrap`}>
-        {typeof data === 'string' ? data : JSON.stringify(data, null, 2)}
-      </pre>
-    </div>
-  );
-};
 
 export const JobDataSection: React.FC<JobDataSectionProps> = ({
   params,
@@ -37,15 +15,28 @@ export const JobDataSection: React.FC<JobDataSectionProps> = ({
   return (
     <>
       {params && (
-        <JsonDataDisplay data={params} title="Input Parameters" />
+        <JsonViewer 
+          data={params} 
+          title="Input Parameters" 
+          defaultExpanded={Object.keys(params).length <= 5}
+        />
       )}
 
       {result && (
-        <JsonDataDisplay data={result} title="Results" />
+        <JsonViewer 
+          data={result} 
+          title="Results" 
+          defaultExpanded={Object.keys(result).length <= 3}
+        />
       )}
 
       {error && (
-        <JsonDataDisplay data={error} title="Error Details" isError={true} />
+        <JsonViewer 
+          data={error} 
+          title="Error Details" 
+          isError={true}
+          defaultExpanded={true}
+        />
       )}
     </>
   );
