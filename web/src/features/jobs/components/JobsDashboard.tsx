@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Job, JobList } from '../types';
-import { api } from '../api';
+import { useState, useEffect, useCallback } from 'react';
+import { Job, JobList } from '../../../types';
+import { api } from '../../../api';
 import JobTable from './JobTable';
 import JobFilters from './JobFilters';
 
