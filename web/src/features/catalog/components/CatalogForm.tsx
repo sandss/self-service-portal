@@ -1,8 +1,7 @@
-import React from 'react';
 import Form from "@rjsf/core";
 import validator from "@rjsf/validator-ajv8";
-import { CatalogDescriptor } from '../../types/catalog';
-import { BUTTON_CLASSES } from '../../constants/catalog';
+import { CatalogDescriptor } from '../../../types/catalog';
+import { BUTTON_CLASSES } from '../../../constants/catalog';
 
 interface CatalogFormProps {
   selected: string;

@@ -1,21 +1,20 @@
 import { useMemo, useCallback } from "react";
-import ConfirmationDialog from "../components/ConfirmationDialog";
+import { ConfirmationDialog, ErrorAlert } from "../../../shared/components";
 import { 
   CatalogHeader,
-  ErrorAlert,
   ImportModal,
   CatalogViewRouter,
   CatalogLayout
-} from "../components/Catalog";
-import { useCatalogItems } from "../hooks/useCatalogItems";
-import { useItemSelection } from "../hooks/useItemSelection";
-import { useCatalogForm } from "../hooks/useCatalogForm";
-import { useDeleteOperations } from "../hooks/useDeleteOperations";
-import { useButtonLabeling } from "../hooks/useButtonLabeling";
-import { useModalState } from "../hooks/useModalState";
-import { useErrorManagement } from "../hooks/useErrorManagement";
-import { useCatalogNavigation } from "../hooks/useCatalogNavigation";
-import "../styles/rjsf-form.css";
+} from "../components";
+import { useCatalogItems } from "../../../hooks/useCatalogItems";
+import { useItemSelection } from "../../../hooks/useItemSelection";
+import { useCatalogForm } from "../../../hooks/useCatalogForm";
+import { useDeleteOperations } from "../../../hooks/useDeleteOperations";
+import { useButtonLabeling } from "../../../hooks/useButtonLabeling";
+import { useModalState } from "../../../hooks/useModalState";
+import { useErrorManagement } from "../../../hooks/useErrorManagement";
+import { useCatalogNavigation } from "../../../hooks/useCatalogNavigation";
+import "../../../styles/rjsf-form.css";
 
 export default function Catalog() {
   // Modal state management

@@ -1,6 +1,6 @@
 import { CatalogGrid } from './CatalogGrid';
-import { LoadingSpinner } from './LoadingSpinner';
-import { CatalogItem } from '../../types/catalog';
+import { LoadingSpinner } from '../../../shared/components';
+import { CatalogItem } from '../../../types/catalog';
 
 interface CatalogViewProps {
   items: CatalogItem[];

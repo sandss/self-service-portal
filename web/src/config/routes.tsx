@@ -1,6 +1,6 @@
 import React from 'react';
 import JobsDashboard from '../features/jobs/components/JobsDashboard';
-import Catalog from '../pages/Catalog';
+import { CatalogPage } from '../features/catalog';
 import { JobDetailPage } from '../features/jobs';
 
 export interface RouteConfig {
@@ -21,6 +21,6 @@ export const routes: RouteConfig[] = [
   },
   {
     path: '/self-service',
-    element: Catalog,
+    element: CatalogPage,
   }
 ];

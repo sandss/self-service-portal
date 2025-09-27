@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { LAYOUT_CLASSES } from '../../constants/catalog';
+import { LAYOUT_CLASSES } from '../../../constants/catalog';
 
 interface CatalogLayoutProps {
   children: ReactNode;

@@ -1,7 +1,7 @@
 import { CatalogView } from './CatalogView';
 import { VersionView } from './VersionView';
 import { FormView } from './FormView';
-import { CatalogView as CatalogViewType, CatalogItem, CatalogDescriptor } from '../../types/catalog';
+import { CatalogView as CatalogViewType, CatalogItem, CatalogDescriptor } from '../../../types/catalog';
 
 interface CatalogViewRouterProps {
   currentView: CatalogViewType;

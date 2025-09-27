@@ -1,7 +1,6 @@
 import { CatalogForm } from './CatalogForm';
-import { SuccessMessage } from './SuccessMessage';
-import { LoadingSpinner } from './LoadingSpinner';
-import { CatalogDescriptor } from '../../types/catalog';
+import { SuccessMessage, LoadingSpinner } from '../../../shared/components';
+import { CatalogDescriptor } from '../../../types/catalog';
 
 interface FormViewProps {
   selected: string;

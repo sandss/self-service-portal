@@ -1,13 +1,11 @@
 export { CatalogHeader } from './CatalogHeader';
-export { ErrorAlert } from './ErrorAlert';
 export { CatalogGrid } from './CatalogGrid';
 export { VersionSelector } from './VersionSelector';
-export { LoadingSpinner } from './LoadingSpinner';
 export { CatalogForm } from './CatalogForm';
-export { SuccessMessage } from './SuccessMessage';
 export { ImportModal } from './ImportModal';
 export { CatalogView } from './CatalogView';
 export { VersionView } from './VersionView';
 export { FormView } from './FormView';
 export { CatalogViewRouter } from './CatalogViewRouter';
 export { CatalogLayout } from './CatalogLayout';
+export { default as ImportCatalog } from './ImportCatalog';

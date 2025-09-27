@@ -1,5 +1,5 @@
 import { VersionSelector } from './VersionSelector';
-import { CatalogItem } from '../../types/catalog';
+import { CatalogItem } from '../../../types/catalog';
 
 interface VersionViewProps {
   selectedItemId: string;

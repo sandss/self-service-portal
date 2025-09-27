@@ -1,4 +1,4 @@
-import { CatalogItem } from '../../types/catalog';
+import { CatalogItem } from '../../../types/catalog';
 
 interface CatalogGridProps {
   items: CatalogItem[];

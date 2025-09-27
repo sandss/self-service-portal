@@ -1,4 +1,4 @@
-import { BUTTON_CLASSES } from '../../constants/catalog';
+import { BUTTON_CLASSES } from '../../../constants/catalog';
 
 interface CatalogHeaderProps {
   onImport: () => void;
