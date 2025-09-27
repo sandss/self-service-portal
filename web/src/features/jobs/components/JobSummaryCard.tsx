@@ -1,6 +1,6 @@
 import React from 'react';
 import { getStateColor, getStateIcon, formatDuration } from '../utils/jobUtils';
-import { CopyButton } from './CopyButton';
+import { CopyButton } from '../../../shared/components/CopyButton';
 
 interface JobDetail {
   id: string;

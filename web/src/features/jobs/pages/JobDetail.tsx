@@ -1,13 +1,15 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useJobDetailV2 } from '../hooks/useJobDetailV2';
-import { JobHeader } from '../components/JobHeader';
-import { JobSummaryCard } from '../components/JobSummaryCard';
-import { JobProgressSection } from '../components/JobProgressSection';
-import { JobTimeline } from '../components/JobTimeline';
-import { JobDataSection } from '../components/JobDataSection';
-import { JobLoading } from '../components/JobLoading';
-import { JobError } from '../components/JobError';
+import { 
+  JobHeader, 
+  JobSummaryCard, 
+  JobProgressSection, 
+  JobTimeline, 
+  JobDataSection, 
+  JobLoading, 
+  JobError 
+} from '../components';
 
 const JobDetail: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();

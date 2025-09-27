@@ -1,7 +1,7 @@
 import React from 'react';
-import JobsDashboard from '../components/JobsDashboard';
+import JobsDashboard from '../features/jobs/components/JobsDashboard';
 import Catalog from '../pages/Catalog';
-import JobDetail from '../pages/JobDetail';
+import { JobDetailPage } from '../features/jobs';
 
 export interface RouteConfig {
   path: string;
@@ -17,7 +17,7 @@ export const routes: RouteConfig[] = [
   },
   {
     path: '/jobs/:jobId',
-    element: JobDetail,
+    element: JobDetailPage,
   },
   {
     path: '/self-service',

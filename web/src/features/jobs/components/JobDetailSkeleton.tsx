@@ -1,5 +1,5 @@
 import React from 'react';
-import { Skeleton, SkeletonText } from './Skeleton';
+import { Skeleton, SkeletonText } from '../../../shared/components/Skeleton';
 import { LoadingState } from '../types/job';
 
 interface JobDetailSkeletonProps {

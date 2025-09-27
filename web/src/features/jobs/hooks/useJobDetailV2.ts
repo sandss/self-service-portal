@@ -1,5 +1,5 @@
 import { useReducer, useCallback, useEffect, useRef } from 'react';
-import { API_BASE_URL } from '../api';
+import { API_BASE_URL } from '../../../api';
 import { JobDetail, LoadingState } from '../types/job';
 import { jobReducer, initialJobState } from './jobReducer';
 import { parseResponseError, parseNetworkError } from '../utils/errorUtils';

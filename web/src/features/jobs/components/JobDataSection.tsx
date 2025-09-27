@@ -1,5 +1,5 @@
 import React from 'react';
-import { JsonViewer } from './JsonViewer';
+import { JsonViewer } from '../../../shared/components/JsonViewer';
 
 interface JobDataSectionProps {
   params?: any;
