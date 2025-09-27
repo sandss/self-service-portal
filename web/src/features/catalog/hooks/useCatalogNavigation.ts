@@ -1,4 +1,4 @@
-import { CatalogView } from '../types/catalog';
+import { CatalogView } from '../../../types/catalog';
 
 export function useCatalogNavigation(selected: string | null, descriptor: any) {
   const getCurrentView = (): CatalogView => {

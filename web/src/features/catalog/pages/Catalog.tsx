@@ -6,14 +6,16 @@ import {
   CatalogViewRouter,
   CatalogLayout
 } from "../components";
-import { useCatalogItems } from "../../../hooks/useCatalogItems";
-import { useItemSelection } from "../../../hooks/useItemSelection";
-import { useCatalogForm } from "../../../hooks/useCatalogForm";
-import { useDeleteOperations } from "../../../hooks/useDeleteOperations";
-import { useButtonLabeling } from "../../../hooks/useButtonLabeling";
-import { useModalState } from "../../../hooks/useModalState";
-import { useErrorManagement } from "../../../hooks/useErrorManagement";
-import { useCatalogNavigation } from "../../../hooks/useCatalogNavigation";
+import {
+  useCatalogItems,
+  useItemSelection,
+  useCatalogForm,
+  useDeleteOperations,
+  useButtonLabeling,
+  useModalState,
+  useErrorManagement,
+  useCatalogNavigation
+} from "../hooks";
 import "../../../styles/rjsf-form.css";
 
 export default function Catalog() {
