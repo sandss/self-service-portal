@@ -18,7 +18,7 @@ interface UseJobDetailReturn {
   setAutoRefresh: (value: boolean) => void;
 }
 
-export const useJobDetailV2 = (jobId: string | undefined): UseJobDetailReturn => {
+export const useJobDetail = (jobId: string | undefined): UseJobDetailReturn => {
   const [state, dispatch] = useReducer(jobReducer, initialJobState);
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

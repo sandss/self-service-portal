@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useJobDetailV2 } from '../hooks/useJobDetailV2';
+import { useJobDetail } from '../hooks';
 import { 
   JobHeader, 
   JobSummaryCard, 
@@ -23,7 +23,7 @@ const JobDetail: React.FC = () => {
     autoRefresh,
     retryCount,
     fetchJobDetail
-  } = useJobDetailV2(jobId);
+  } = useJobDetail(jobId);
 
   console.log('JobDetail component mounted, jobId:', jobId);
   console.log('Render state - loading:', loading, 'error:', error, 'job:', job ? 'present' : 'null');

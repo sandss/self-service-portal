@@ -9,7 +9,7 @@ export { JobSummaryCard } from './components/JobSummaryCard';
 export { JobTimeline } from './components/JobTimeline';
 
 // Hooks
-export { useJobDetailV2 } from './hooks/useJobDetailV2';
+export { useJobDetail } from './hooks';
 export { jobReducer, initialJobState } from './hooks/jobReducer';
 export type { JobAction } from './hooks/jobReducer';
 
