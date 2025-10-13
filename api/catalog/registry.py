@@ -17,24 +17,28 @@ def _save(data: dict):
     with open(REGISTRY_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
+
 from api.common.db import SessionLocal
 from api.catalog.repository import CatalogRepo
 
 def upsert_version(item_id: str, version: str, manifest: dict, schema: dict, ui: dict|None,
-                   storage_uri: str, source: dict):
+                   storage_uri: str, source: dict, additional_schemas: dict = None):
     # Legacy implementation with dual-write support
     with _lock:
         # First, update JSON (source of truth)
         db = _load()
         items = db["items"].setdefault(item_id, {"versions": {}})
+        
         items["versions"][version] = {
             "manifest": manifest,
             "schema": schema,
             "ui": ui or {},
+            "additional_schemas": additional_schemas or {},
             "storage_uri": storage_uri,
             "source": source,
             "active": True
         }
+        
         _save(db)
         
         # Then, dual-write to PostgreSQL if enabled
@@ -54,7 +58,6 @@ def upsert_version(item_id: str, version: str, manifest: dict, schema: dict, ui:
                     labels=manifest.get("labels", {}),
                     description=manifest.get("description")
                 )
-                print(f"✅ Successfully wrote {item_id} v{version} to database")
         except Exception as e:
             # Log error but don't fail the request since JSON write succeeded
             print(f"❌ Failed to write {item_id} v{version} to database: {e}")
@@ -208,6 +211,17 @@ def _load_version_from_path(path: str, item_id: str, version: str) -> Optional[D
             with open(ui_path, "r") as f:
                 ui = json.load(f)
         
+        # Load additional schemas based on x-schema-map in the main schema
+        additional_schemas = {}
+        schema_map = schema.get("x-schema-map", {})
+        
+        if schema_map:
+            for action, schema_filename in schema_map.items():
+                additional_schema_path = os.path.join(path, schema_filename)
+                if os.path.exists(additional_schema_path):
+                    with open(additional_schema_path) as f:
+                        additional_schemas[schema_filename] = json.load(f)
+        
         # Load task code (optional)
         task_code = None
         if os.path.exists(task_path):
@@ -229,6 +243,7 @@ def _load_version_from_path(path: str, item_id: str, version: str) -> Optional[D
             "manifest": manifest,
             "schema": schema,
             "ui": ui,
+            "additional_schemas": additional_schemas,
             "storage_uri": storage_uri,
             "source": meta.get("source", {"type": "local_sync", "sync_timestamp": datetime.utcnow().isoformat()}),
             "active": True
@@ -523,7 +538,6 @@ def get_local_catalog_item_path(item_id: str, version: str) -> str:
     # Check if bundle exists and extract it
     bundle_path = f"/app/data/bundles/{item_id}@{version}.tar.gz"
     if os.path.exists(bundle_path):
-        print(f"📦 Extracting bundle {item_id}@{version} to catalog_local...")
         os.makedirs(local_path, exist_ok=True)
         
         with tarfile.open(bundle_path, 'r:gz') as tar:
@@ -531,7 +545,6 @@ def get_local_catalog_item_path(item_id: str, version: str) -> str:
         
         # Verify extraction worked
         if os.path.exists(task_file):
-            print(f"✅ Successfully extracted {item_id}@{version}")
             return local_path
         else:
             raise FileNotFoundError(f"task.py not found in bundle {item_id}@{version}")

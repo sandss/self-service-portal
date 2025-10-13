@@ -61,27 +61,11 @@ class CatalogRepo:
         labels: Optional[Dict[str, Any]] = None,
         description: Optional[str] = None,
     ) -> Tuple[str, str]:
-        # 1) Write to JSON (source of truth)
-        reg = _load_registry()
-        items = reg.setdefault("items", {})
-        item = items.setdefault(item_id, {"versions": {}, "name": name, "labels": labels or {}, "description": description})
-        item["name"] = name
-        if labels: 
-            item["labels"] = labels
-        if description is not None: 
-            item["description"] = description
-
-        item["versions"][version] = {
-            "manifest": manifest,
-            "schema": json_schema,
-            "ui": ui_schema,
-            "storage_uri": storage_uri,
-            "source": source,
-            "active": is_active,
-        }
-        _write_registry(reg)
-
-        # 2) Best-effort DB write (must not fail silently; raise if DB_enabled and write fails)
+        # NOTE: JSON write is handled by upsert_version() in registry.py
+        # We only handle database writes here to avoid overwriting the JSON file
+        # which may have additional fields like additional_schemas
+        
+        # Best-effort DB write (must not fail silently; raise if DB_enabled and write fails)
         if self.db_enabled:
             try:
                 ci = self.db.execute(select(CatalogItem).where(CatalogItem.item_id == item_id)).scalar_one_or_none()

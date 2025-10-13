@@ -29,14 +29,42 @@ def api_list_versions(item_id: str):
 def api_descriptor(item_id: str, version: str):
     d = get_descriptor(item_id, version)
     if not d: raise HTTPException(404, "not found")
-    return {"manifest": d["manifest"], "schema": d["schema"], "ui": d.get("ui", {})}
+    return {
+        "manifest": d["manifest"], 
+        "schema": d["schema"], 
+        "ui": d.get("ui", {}),
+        "additional_schemas": d.get("additional_schemas", {})
+    }
+
+@router.get("/{item_id}/{version}/schema/{schema_name}")
+def api_get_additional_schema(item_id: str, version: str, schema_name: str):
+    """
+    Fetch a specific schema by name from the additional_schemas collection.
+    This is used for automatic schema switching based on x-schema-map.
+    """
+    d = get_descriptor(item_id, version)
+    if not d: 
+        raise HTTPException(404, "Item or version not found")
+    
+    additional_schemas = d.get("additional_schemas", {})
+    
+    if schema_name not in additional_schemas:
+        raise HTTPException(404, f"Schema '{schema_name}' not found in additional schemas")
+    
+    return additional_schemas[schema_name]
 
 @router.get("/{item_id}/latest/descriptor")
 def api_descriptor_latest(item_id: str):
     r = resolve_latest(item_id)
     if not r: raise HTTPException(404, "not found")
     version, d = r
-    return {"version": version, "manifest": d["manifest"], "schema": d["schema"], "ui": d.get("ui", {})}
+    return {
+        "version": version, 
+        "manifest": d["manifest"], 
+        "schema": d["schema"], 
+        "ui": d.get("ui", {}),
+        "additional_schemas": d.get("additional_schemas", {})
+    }
 
 # Local import (DEPRECATED - use /import instead)
 @router.post("/local/import")
@@ -49,12 +77,12 @@ def api_local_import(body: dict = Body(...)):
     path = body.get("path")
     if not path or not os.path.isdir(path):
         raise HTTPException(400, "invalid path")
-    m, s, u = load_descriptor_from_dir(path)
+    m, s, u, additional = load_descriptor_from_dir(path)
     validate_manifest(m); validate_schema(s)
     item_id = m["id"]; version = m["version"]
     blob = pack_dir(path)
     storage_uri = write_blob(item_id, version, blob)
-    upsert_version(item_id, version, m, s, u, storage_uri, {"source": "local", "path": path})
+    upsert_version(item_id, version, m, s, u, storage_uri, {"source": "local", "path": path}, additional_schemas=additional)
     return {
         "item_id": item_id, 
         "version": version,
