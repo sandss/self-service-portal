@@ -82,6 +82,9 @@ export function FormSection({
         onSubmit={onSubmit}
         disabled={isSubmitting}
         templates={customTemplates}
+        liveValidate={true}
+        showErrorList="top"
+        focusOnFirstError={true}
       >
         {showSubmit && (
           <SubmitButton

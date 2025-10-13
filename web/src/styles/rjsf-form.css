@@ -94,6 +94,49 @@
   display: block;
 }
 
+/* Error list styling */
+.rjsf .error-list {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.rjsf .error-list .panel-danger {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rjsf .error-list .panel-heading {
+  font-weight: 600;
+  color: #991b1b;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.rjsf .error-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rjsf .error-list li {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: flex-start;
+}
+
+.rjsf .error-list li:before {
+  content: "•";
+  margin-right: 0.5rem;
+  font-weight: bold;
+}
+
 /* Button base styling */
 .rjsf button {
   display: inline-flex;
