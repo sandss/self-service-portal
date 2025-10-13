@@ -4,11 +4,8 @@ import validator from '@rjsf/validator-ajv8'
 import type { RJSFSchema } from '@rjsf/utils'
 import { CatalogDescriptor } from '../../../types/catalog'
 import { BUTTON_CLASSES } from '../../../constants/catalog'
-
-interface SchemaWithMap extends RJSFSchema {
-  'x-schema-map'?: Record<string, string>
-  'x-schema-trigger-field'?: string
-}
+import { customTemplates } from './CustomTemplates'
+import { useSchemaLoader } from '../hooks/useSchemaLoader'
 
 interface CatalogFormProps {
   selected: string
@@ -19,36 +16,6 @@ interface CatalogFormProps {
   onBack: () => void
 }
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-/**
- * Helper function to fetch schema from local or remote source
- * @param itemId - The catalog item ID
- * @param version - The version of the item
- * @param schemaName - The schema filename to load (from x-schema-map)
- * @returns Promise resolving to the schema object
- */
-const fetchSchema = async (itemId: string, version: string, schemaName: string): Promise<SchemaWithMap> => {
-  console.log(`🔄 fetchSchema called for: ${itemId}@${version}/${schemaName}`)
-  
-  try {
-    // Fetch schema from the API endpoint
-    // The schema file should be part of the catalog item's version
-    const response = await fetch(`${API}/catalog/${itemId}/${version}/schema/${schemaName}`)
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to fetch schema ${schemaName}`)
-    }
-    
-    const schema = await response.json()
-    console.log(`✅ Schema loaded: ${schema.title || schemaName}`)
-    return schema as SchemaWithMap
-  } catch (err) {
-    console.error(`❌ Error loading schema ${schemaName}:`, err)
-    throw err
-  }
-}
-
 export function CatalogForm({ 
   selected, 
   version, 
@@ -57,62 +24,30 @@ export function CatalogForm({
   onSubmit, 
   onBack 
 }: CatalogFormProps) {
-  const [currentSchema, setCurrentSchema] = useState<SchemaWithMap>(descriptor.schema as SchemaWithMap)
-  const [actionSchema, setActionSchema] = useState<SchemaWithMap | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [actionFormData, setActionFormData] = useState<Record<string, any>>({})
-  const [loadedAction, setLoadedAction] = useState<string | null>(null)
 
-  // Reset state when descriptor changes
+  // Use the schema loader hook to handle automatic schema loading
+  const { 
+    currentSchema, 
+    actionSchema, 
+    setActionSchema, 
+    setLoadedAction, 
+    resetSchemas 
+  } = useSchemaLoader(
+    selected,
+    version,
+    descriptor.schema,
+    formData
+  )
+
+  // Reset form data when descriptor changes
   useEffect(() => {
     console.log('📋 Descriptor updated, resetting form state')
-    setCurrentSchema(descriptor.schema as SchemaWithMap)
-    setActionSchema(null)
+    resetSchemas()
     setFormData({})
     setActionFormData({})
-    setLoadedAction(null)
-  }, [descriptor])
-
-  // Watch for trigger field changes (defaults to 'action' if not specified)
-  useEffect(() => {
-    if (!currentSchema) return
-
-    const schemaMap = currentSchema['x-schema-map']
-    const triggerField = currentSchema['x-schema-trigger-field'] || 'action'
-    const selectedAction = formData[triggerField]
-
-    // If action is selected and different from loaded action
-    if (schemaMap && selectedAction && selectedAction !== loadedAction) {
-      const nextSchemaName = schemaMap[selectedAction]
-      
-      if (nextSchemaName) {
-        console.log(`🔄 ${triggerField} selected: "${selectedAction}" → Loading schema: ${nextSchemaName}`)
-        
-        // Fetch the new schema file
-        fetchSchema(selected, version, nextSchemaName)
-          .then(schema => {
-            console.log(`✅ Schema loaded: ${schema.title}`)
-            
-            // Swap schema state dynamically
-            setActionSchema(schema)
-            setLoadedAction(selectedAction)
-            setActionFormData({}) // Reset action form data
-          })
-          .catch(err => {
-            console.error(`❌ Failed to load schema for action "${selectedAction}":`, err)
-            // Keep the form usable even if schema loading fails
-          })
-      }
-    }
-    
-    // If action was deselected, clear the action schema
-    if (!selectedAction && loadedAction) {
-      console.log('⬅️ Action deselected, clearing action form')
-      setActionSchema(null)
-      setLoadedAction(null)
-      setActionFormData({})
-    }
-  }, [formData, currentSchema, loadedAction, selected, version])
+  }, [descriptor, resetSchemas])
 
   const handleFormChange = ({ formData: newFormData }: any) => {
     setFormData(newFormData)
@@ -192,6 +127,7 @@ export function CatalogForm({
             onChange={handleFormChange}
             onSubmit={handleFormSubmit}
             disabled={isCreatingJob}
+            templates={customTemplates}
           >
             {/* Only show submit button if no action schema is loaded */}
             {!actionSchema && (
@@ -221,13 +157,6 @@ export function CatalogForm({
           </Form>
         </div>
 
-        {/* Tip text - show only if schema has x-schema-map and no action selected */}
-        {!actionSchema && currentSchema['x-schema-map'] && (
-          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-            <strong>💡 Tip:</strong> Select an action above to automatically load the corresponding workflow form below
-          </div>
-        )}
-
         {/* Action-specific form - Shows below when action is selected */}
         {actionSchema && (
           <div className="mt-6 rjsf" style={{
@@ -240,6 +169,7 @@ export function CatalogForm({
               onChange={handleActionChange}
               onSubmit={handleFormSubmit}
               disabled={isCreatingJob}
+              templates={customTemplates}
             >
               <button 
                 className={BUTTON_CLASSES.submit}
