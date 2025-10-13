@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import Form from '@rjsf/core'
 import validator from '@rjsf/validator-ajv8'
 import type { RJSFSchema } from '@rjsf/utils'
@@ -6,6 +6,7 @@ import { CatalogDescriptor } from '../../../types/catalog'
 import { BUTTON_CLASSES } from '../../../constants/catalog'
 import { customTemplates } from './CustomTemplates'
 import { useSchemaLoader } from '../hooks/useSchemaLoader'
+import { useFormState } from '../hooks/useFormState'
 
 interface CatalogFormProps {
   selected: string
@@ -24,10 +25,18 @@ export function CatalogForm({
   onSubmit, 
   onBack 
 }: CatalogFormProps) {
-  const [formData, setFormData] = useState<Record<string, any>>({})
-  const [actionFormData, setActionFormData] = useState<Record<string, any>>({})
+  // Manage form state
+  const {
+    formData,
+    actionFormData,
+    setActionFormData,
+    handleFormChange,
+    handleActionChange,
+    resetFormData,
+    getMergedData,
+  } = useFormState()
 
-  // Use the schema loader hook to handle automatic schema loading
+  // Handle automatic schema loading based on form data
   const { 
     currentSchema, 
     actionSchema, 
@@ -41,25 +50,16 @@ export function CatalogForm({
     formData
   )
 
-  // Reset form data when descriptor changes
+  // Reset all state when descriptor changes
   useEffect(() => {
-    console.log('📋 Descriptor updated, resetting form state')
+    console.log('📋 Descriptor updated, resetting all state')
     resetSchemas()
-    setFormData({})
-    setActionFormData({})
-  }, [descriptor, resetSchemas])
-
-  const handleFormChange = ({ formData: newFormData }: any) => {
-    setFormData(newFormData)
-  }
-
-  const handleActionChange = ({ formData: newFormData }: any) => {
-    setActionFormData(newFormData)
-  }
+    resetFormData()
+  }, [descriptor, resetSchemas, resetFormData])
 
   const handleFormSubmit = ({ formData: submitData }: any) => {
-    // If we have an action schema, merge both forms' data
-    const finalData = actionSchema ? { ...formData, ...actionFormData } : submitData
+    // Get merged data if we have an action schema, otherwise use submitted data
+    const finalData = actionSchema ? getMergedData() : submitData
     console.log('📝 Form submitted:', finalData)
     onSubmit(finalData)
   }
