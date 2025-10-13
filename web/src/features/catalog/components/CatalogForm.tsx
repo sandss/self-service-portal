@@ -7,6 +7,7 @@ import { BUTTON_CLASSES } from '../../../constants/catalog'
 import { customTemplates } from './CustomTemplates'
 import { useSchemaLoader } from '../hooks/useSchemaLoader'
 import { useFormState } from '../hooks/useFormState'
+import { useCatalogSubmit } from '../hooks/useCatalogSubmit'
 
 interface CatalogFormProps {
   selected: string
@@ -57,12 +58,12 @@ export function CatalogForm({
     resetFormData()
   }, [descriptor, resetSchemas, resetFormData])
 
-  const handleFormSubmit = ({ formData: submitData }: any) => {
-    // Get merged data if we have an action schema, otherwise use submitted data
-    const finalData = actionSchema ? getMergedData() : submitData
-    console.log('📝 Form submitted:', finalData)
-    onSubmit(finalData)
-  }
+  // Handle form submission with data merging
+  const { handleFormSubmit } = useCatalogSubmit(
+    onSubmit,
+    getMergedData,
+    actionSchema
+  )
 
   return (
     <div>
@@ -95,30 +96,6 @@ export function CatalogForm({
         <div className="rjsf" style={{ 
           transition: 'all 0.3s ease'
         }}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium" style={{ 
-              color: actionSchema ? '#4CAF50' : '#333'
-            }}>
-              {actionSchema && '✓ '}{currentSchema.title || 'Configuration Form'}
-            </h3>
-            {actionSchema && (
-              <button
-                onClick={() => {
-                  console.log('🔄 Clearing action schema to allow editing main form')
-                  setActionSchema(null)
-                  setLoadedAction(null)
-                  setActionFormData({})
-                }}
-                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors flex items-center gap-1"
-                type="button"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit
-              </button>
-            )}
-          </div>
           <Form
             schema={currentSchema as RJSFSchema}
             uiSchema={descriptor.ui}
