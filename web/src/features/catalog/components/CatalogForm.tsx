@@ -1,13 +1,11 @@
 import { useEffect } from 'react'
-import Form from '@rjsf/core'
-import validator from '@rjsf/validator-ajv8'
 import type { RJSFSchema } from '@rjsf/utils'
 import { CatalogDescriptor } from '../../../types/catalog'
 import { BUTTON_CLASSES } from '../../../constants/catalog'
-import { customTemplates } from './CustomTemplates'
 import { useSchemaLoader } from '../hooks/useSchemaLoader'
 import { useFormState } from '../hooks/useFormState'
 import { useCatalogSubmit } from '../hooks/useCatalogSubmit'
+import { FormSection } from './FormSection'
 
 interface CatalogFormProps {
   selected: string
@@ -30,7 +28,6 @@ export function CatalogForm({
   const {
     formData,
     actionFormData,
-    setActionFormData,
     handleFormChange,
     handleActionChange,
     resetFormData,
@@ -41,8 +38,6 @@ export function CatalogForm({
   const { 
     currentSchema, 
     actionSchema, 
-    setActionSchema, 
-    setLoadedAction, 
     resetSchemas 
   } = useSchemaLoader(
     selected,
@@ -93,85 +88,28 @@ export function CatalogForm({
         </div>
         
         {/* Main questionnaire form */}
-        <div className="rjsf" style={{ 
-          transition: 'all 0.3s ease'
-        }}>
-          <Form
-            schema={currentSchema as RJSFSchema}
-            uiSchema={descriptor.ui}
-            formData={formData}
-            validator={validator}
-            onChange={handleFormChange}
-            onSubmit={handleFormSubmit}
-            disabled={isCreatingJob}
-            templates={customTemplates}
-          >
-            {/* Only show submit button if no action schema is loaded */}
-            {!actionSchema && (
-              <button 
-                className={BUTTON_CLASSES.submit}
-                type="submit"
-                disabled={isCreatingJob}
-              >
-                {isCreatingJob ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Creating Job...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-7 4h8a2 2 0 002-2V8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Execute Task
-                  </>
-                )}
-              </button>
-            )}
-          </Form>
-        </div>
+        <FormSection
+          schema={currentSchema as RJSFSchema}
+          uiSchema={descriptor.ui}
+          formData={formData}
+          onChange={handleFormChange}
+          onSubmit={handleFormSubmit}
+          isSubmitting={isCreatingJob}
+          showSubmit={!actionSchema}
+        />
 
         {/* Action-specific form - Shows below when action is selected */}
         {actionSchema && (
-          <div className="mt-6 rjsf" style={{
-            animation: 'slideIn 0.3s ease-out'
-          }}>
-            <Form
-              schema={actionSchema as RJSFSchema}
-              formData={actionFormData}
-              validator={validator}
-              onChange={handleActionChange}
-              onSubmit={handleFormSubmit}
-              disabled={isCreatingJob}
-              templates={customTemplates}
-            >
-              <button 
-                className={BUTTON_CLASSES.submit}
-                type="submit"
-                disabled={isCreatingJob}
-              >
-                  {isCreatingJob ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Creating Job...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-7 4h8a2 2 0 002-2V8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      Execute Task
-                    </>
-                  )}
-                </button>
-              </Form>
-          </div>
+          <FormSection
+            schema={actionSchema as RJSFSchema}
+            formData={actionFormData}
+            onChange={handleActionChange}
+            onSubmit={handleFormSubmit}
+            isSubmitting={isCreatingJob}
+            showSubmit={true}
+            animated={true}
+            className="mt-6"
+          />
         )}
       </div>
 
