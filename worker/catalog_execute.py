@@ -26,13 +26,15 @@ async def run_catalog_item(ctx, item_id: str, version: str, inputs: Dict[str, An
         await set_status(ar, job_id, "FAILED", {"error": "descriptor not found"}); return
 
     schema = desc["schema"]
-    validate_inputs(schema, inputs)
-
+    
     # Use versioned local storage directly instead of unpacking from blob
     item_path = get_local_catalog_item_path(item_id, version)
     task_path = os.path.join(item_path, "task.py")
     
     try:
+        # Validate inputs inside try-catch so validation errors are properly handled
+        validate_inputs(schema, inputs)
+        
         task = _load_task(task_path)
         
         # Create progress callback function
