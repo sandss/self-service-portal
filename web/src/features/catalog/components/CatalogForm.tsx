@@ -90,14 +90,17 @@ export function CatalogForm({
         
         {/* Validation Error Alert */}
         {validationError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
             <div className="flex items-start">
-              <svg className="w-5 h-5 text-red-600 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-6 h-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
-              <div>
-                <h3 className="text-sm font-semibold text-red-800 mb-1">Validation Error</h3>
-                <p className="text-sm text-red-700">{validationError}</p>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-red-800 mb-2">Please complete all required fields</h3>
+                <p className="text-sm text-red-700 whitespace-pre-line">{validationError}</p>
+                <p className="text-xs text-red-600 mt-2 italic">
+                  Make sure both the main form and action form are fully filled out before submitting.
+                </p>
               </div>
             </div>
           </div>

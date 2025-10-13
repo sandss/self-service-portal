@@ -45,8 +45,8 @@ export function useCatalogSubmit(
 
   /**
    * Handle form submission
-   * If there's an action schema, merge both forms' data and validate
-   * Otherwise, use the submitted data as-is
+   * If there's an action schema, merge both forms' data and validate against MAIN schema
+   * Otherwise, use the submitted data as-is (RJSF validates automatically)
    */
   const handleFormSubmit = useCallback(
     ({ formData: submitData }: any) => {
@@ -56,17 +56,26 @@ export function useCatalogSubmit(
       const finalData = actionSchema ? getMergedData() : submitData
       console.log('📝 Form submitted:', finalData)
       
-      // Validate merged data against the main schema
+      // CRITICAL: When action schema exists, we must validate merged data against MAIN schema
+      // because RJSF only validates the action form, not the main form's required fields
       if (actionSchema) {
+        console.log('🔍 Validating merged data against main schema:', mainSchema.required)
         const validationResult = validator.validateFormData(finalData, mainSchema)
+        
         if (validationResult.errors && validationResult.errors.length > 0) {
-          const errorMessage = validationResult.errors
-            .map(err => `${err.property}: ${err.message}`)
-            .join('; ')
+          const errorMessages = validationResult.errors.map(err => {
+            // Extract field name from property path (e.g., ".client" -> "client")
+            const field = err.property?.replace(/^\./, '') || 'field'
+            return `${field}: ${err.message}`
+          })
+          
+          const errorMessage = errorMessages.join('; ')
           console.error('❌ Validation failed:', validationResult.errors)
           setValidationError(errorMessage)
           return // Don't submit if validation fails
         }
+        
+        console.log('✅ Validation passed!')
       }
       
       // Call the parent's submit handler
