@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RJSFSchema } from '@rjsf/utils'
-import validator from '@rjsf/validator-ajv8'
 import { CatalogDescriptor } from '../../../types/catalog'
 import { BUTTON_CLASSES } from '../../../constants/catalog'
 import { useSchemaLoader } from '../hooks/useSchemaLoader'
 import { useFormState } from '../hooks/useFormState'
+import { useFormValidation } from '../hooks/useFormValidation'
 import { useCatalogSubmit } from '../hooks/useCatalogSubmit'
 import { FormSection } from './FormSection'
 
@@ -27,9 +27,6 @@ export function CatalogForm({
 }: CatalogFormProps) {
   const mainFormRef = useRef<any>(null)
   const actionFormRef = useRef<any>(null)
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [mainFormErrors, setMainFormErrors] = useState<any>({})
-  const [actionFormErrors, setActionFormErrors] = useState<any>({})
 
   // Manage form state
   const {
@@ -53,92 +50,39 @@ export function CatalogForm({
     formData
   )
 
+  // Handle form validation
+  const {
+    mainFormErrors,
+    actionFormErrors,
+    validationErrors,
+    validateForms,
+    setErrors,
+    clearErrors,
+  } = useFormValidation(
+    descriptor.schema as RJSFSchema,
+    actionSchema
+  )
+
   // Reset all state when descriptor changes
   useEffect(() => {
     console.log('📋 Descriptor updated, resetting all state')
     resetSchemas()
     resetFormData()
-    setValidationErrors([])
-    setMainFormErrors({})
-    setActionFormErrors({})
-  }, [descriptor, resetSchemas, resetFormData])
+    clearErrors()
+  }, [descriptor, resetSchemas, resetFormData, clearErrors])
 
   // Handle validation and submission of both forms
   const handleExecute = async () => {
     console.log('🚀 Execute button clicked - validating all forms...')
-    setValidationErrors([])
-    setMainFormErrors({})
-    setActionFormErrors({})
-
+    
     const mergedData = getMergedData()
-    console.log('📦 Merged data:', mergedData)
     
-    const mainSchema = descriptor.schema as RJSFSchema
+    // Validate both forms using the validation hook
+    const errors = validateForms(mergedData, actionFormData)
     
-    // Validate merged data against main schema
-    const mainValidation = validator.validateFormData(mergedData, mainSchema)
-    
-    // Also validate action form data against action schema if it exists
-    let actionValidation = { errors: [] as any[] }
-    if (actionSchema) {
-      actionValidation = validator.validateFormData(actionFormData, actionSchema as RJSFSchema)
-      console.log('🔍 Action form validation:', actionValidation)
-    }
-    
-    // Combine errors from both validations
-    const allErrors = [...(mainValidation.errors || []), ...(actionValidation.errors || [])]
-    
-    if (allErrors.length > 0) {
-      console.log('❌ Validation failed:', allErrors)
-      
-      // Build error objects for both forms
-      const mainErrs: any = {}
-      const actionErrs: any = {}
-      const errorList: string[] = []
-      
-      // Debug: log available schemas
-      console.log('🔍 Main schema properties:', Object.keys(mainSchema.properties || {}))
-      console.log('🔍 Action schema:', actionSchema)
-      if (actionSchema) {
-        console.log('🔍 Action schema.properties:', actionSchema.properties)
-        console.log('🔍 Action schema keys:', Object.keys(actionSchema.properties || {}))
-      }
-      
-      allErrors.forEach(err => {
-        const fieldPath = err.property?.replace(/^\./, '') || 'field'
-        const field = fieldPath.split('.')[0]
-        const message = err.message || 'This field is required'
-        
-        console.log(`🔍 Processing error for field: "${field}", full path: "${fieldPath}"`)
-        
-        errorList.push(`${field}: ${message}`)
-        
-        // Check if field belongs to action schema or main schema
-        const mainSchemaProps = mainSchema.properties || {}
-        
-        // Check if field is NOT in main schema - then it must be in action schema
-        if (!mainSchemaProps[field] && actionSchema) {
-          // Field is NOT in main schema, so it's in action schema
-          actionErrs[field] = { __errors: [message] }
-          console.log(`✅ Adding error to action form (not in main): ${field}`)
-        } else if (mainSchemaProps[field]) {
-          // Field IS in main schema
-          mainErrs[field] = { __errors: [message] }
-          console.log(`✅ Adding error to main form: ${field}`)
-        } else {
-          // Unknown field - default to main form
-          mainErrs[field] = { __errors: [message] }
-          console.log(`⚠️ Unknown field "${field}" - defaulting to main form`)
-        }
-      })
-      
-      console.log('📝 Final main form errors:', mainErrs)
-      console.log('📝 Final action form errors:', actionErrs)
-      
-      setValidationErrors(errorList)
-      setMainFormErrors(mainErrs)
-      setActionFormErrors(actionErrs)
-      
+    // If there are validation errors, set them and stop submission
+    if (errors.errorMessages.length > 0) {
+      setErrors(errors)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
