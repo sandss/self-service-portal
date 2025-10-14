@@ -1,3 +1,4 @@
+import { forwardRef } from 'react'
 import Form from '@rjsf/core'
 import validator from '@rjsf/validator-ajv8'
 import type { RJSFSchema, UiSchema } from '@rjsf/utils'
@@ -16,6 +17,7 @@ interface FormSectionProps {
   submitLoadingLabel?: string
   animated?: boolean
   className?: string
+  extraErrors?: any
 }
 
 /**
@@ -51,7 +53,7 @@ interface FormSectionProps {
  * />
  * ```
  */
-export function FormSection({
+export const FormSection = forwardRef<any, FormSectionProps>(({
   schema,
   uiSchema,
   formData,
@@ -63,7 +65,8 @@ export function FormSection({
   submitLoadingLabel,
   animated = false,
   className = '',
-}: FormSectionProps) {
+  extraErrors = {},
+}, ref) => {
   const baseClasses = 'rjsf'
   const classes = className ? `${baseClasses} ${className}` : baseClasses
   
@@ -74,6 +77,7 @@ export function FormSection({
   return (
     <div className={classes} style={style}>
       <Form
+        ref={ref}
         schema={schema}
         uiSchema={uiSchema}
         formData={formData}
@@ -82,9 +86,7 @@ export function FormSection({
         onSubmit={onSubmit}
         disabled={isSubmitting}
         templates={customTemplates}
-        showErrorList="top"
-        focusOnFirstError={true}
-        noHtml5Validate={true}
+        extraErrors={extraErrors}
       >
         {showSubmit && (
           <SubmitButton
@@ -96,4 +98,6 @@ export function FormSection({
       </Form>
     </div>
   )
-}
+})
+
+FormSection.displayName = 'FormSection'
