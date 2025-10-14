@@ -87,6 +87,7 @@ export const FormSection = forwardRef<any, FormSectionProps>(({
         disabled={isSubmitting}
         templates={customTemplates}
         extraErrors={extraErrors}
+        showErrorList={false}
       >
         {showSubmit && (
           <SubmitButton
