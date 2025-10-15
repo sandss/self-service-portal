@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { RJSFSchema } from '@rjsf/utils'
 import validator from '@rjsf/validator-ajv8'
 
@@ -119,20 +119,20 @@ export function useFormValidation(
   /**
    * Sets validation errors in state
    */
-  const setErrors = (errors: ValidationErrors) => {
+  const setErrors = useCallback((errors: ValidationErrors) => {
     setMainFormErrors(errors.mainFormErrors)
     setActionFormErrors(errors.actionFormErrors)
     setValidationErrors(errors.errorMessages)
-  }
+  }, [])
 
   /**
    * Clears all validation errors
    */
-  const clearErrors = () => {
+  const clearErrors = useCallback(() => {
     setMainFormErrors({})
     setActionFormErrors({})
     setValidationErrors([])
-  }
+  }, [])
 
   return {
     // State

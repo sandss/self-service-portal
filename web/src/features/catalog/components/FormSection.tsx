@@ -84,7 +84,6 @@ export const FormSection = forwardRef<any, FormSectionProps>(({
         validator={validator}
         onChange={onChange}
         onSubmit={onSubmit}
-        disabled={isSubmitting}
         templates={customTemplates}
         extraErrors={extraErrors}
         showErrorList={false}
