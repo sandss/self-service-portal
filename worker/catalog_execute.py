@@ -4,6 +4,7 @@ from api.catalog.registry import get_descriptor, get_local_catalog_item_path
 from api.catalog.bundles import read_blob, unpack_to_temp
 from api.catalog.validate import validate_inputs
 from .tasks import set_status  # reuse your existing status helper
+from jsonschema.exceptions import ValidationError
 
 def _load_task(task_path: str):
     if not os.path.exists(task_path):
@@ -25,14 +26,14 @@ async def run_catalog_item(ctx, item_id: str, version: str, inputs: Dict[str, An
     if not desc:
         await set_status(ar, job_id, "FAILED", {"error": "descriptor not found"}); return
 
-    schema = desc["schema"]
-    validate_inputs(schema, inputs)
-
-    # Use versioned local storage directly instead of unpacking from blob
-    item_path = get_local_catalog_item_path(item_id, version)
-    task_path = os.path.join(item_path, "task.py")
-    
     try:
+        schema = desc["schema"]
+        validate_inputs(schema, inputs)
+
+        # Use versioned local storage directly instead of unpacking from blob
+        item_path = get_local_catalog_item_path(item_id, version)
+        task_path = os.path.join(item_path, "task.py")
+        
         task = _load_task(task_path)
         
         # Create progress callback function
@@ -68,6 +69,19 @@ async def run_catalog_item(ctx, item_id: str, version: str, inputs: Dict[str, An
             
         await set_status(ar, job_id, "SUCCEEDED", {"result": res, "progress": 100, "message": "Task completed successfully"})
         return res
+    except ValidationError as e:
+        error_payload = {
+            "error_type": type(e).__name__,
+            "error_message": e.message,
+        }
+        if e.path:
+            error_payload["error_path"] = list(e.path)
+        await set_status(ar, job_id, "FAILED", {"error": error_payload})
+        raise
     except Exception as e:
-        await set_status(ar, job_id, "FAILED", {"error": str(e)})
+        error_payload = {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+        }
+        await set_status(ar, job_id, "FAILED", {"error": error_payload})
         raise

@@ -9,11 +9,14 @@ export function useCatalogForm() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string>("");
 
-  const submitJob = async (data: any, selected: string, version: string) => {
+  const submitJob = async (inputs: Record<string, any>, selected: string | null, version: string | null) => {
     try {
+      if (!selected || !version) {
+        throw new Error("Catalog item and version must be selected before submitting a job");
+      }
       setIsCreatingJob(true);
       setError("");
-      console.log("Submitting job:", data.formData);
+      console.log("Submitting job:", inputs);
       
       const response = await fetch(`${API}/jobs`, {
         method: "POST",
@@ -23,7 +26,7 @@ export function useCatalogForm() {
           parameters: { 
             item_id: selected, 
             version, 
-            inputs: data.formData 
+            inputs 
           } 
         })
       });
