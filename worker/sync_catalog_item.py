@@ -3,7 +3,7 @@ from datetime import datetime
 from arq.connections import ArqRedis
 from api.catalog.descriptor_utils import atomic_write
 from api.catalog.registry import upsert_version
-from worker.tasks import _touch
+from worker.job_status import touch_job
 
 BUNDLES_DIR = "/app/data/bundles"
 ITEMS_SUBDIR = "items"
@@ -65,7 +65,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
             "error": None,
             "current_step": "Starting git import"
         }
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
     
         item_id, git_ref = parse_tag(ref)
     
@@ -88,7 +88,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "current_step": "Cloning repository",
                 "updated_at": datetime.utcnow().isoformat()
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
             
             run("git", "init")
             run("git", "remote", "add", "origin", repo_url)
@@ -113,7 +113,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "current_step": "Processing repository structure",
                 "updated_at": datetime.utcnow().isoformat()
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
             
             # Find item directory - support both flat and nested structures
             try:
@@ -153,7 +153,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "current_step": "Validating catalog item",
                 "updated_at": datetime.utcnow().isoformat()
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
             
             manifest, schema, ui = load_descriptor_from_dir(item_dir)
             
@@ -172,7 +172,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "current_step": "Creating bundle",
                 "updated_at": datetime.utcnow().isoformat()
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
             
             bundle_bytes = pack_dir(item_dir)
             
@@ -187,7 +187,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "current_step": "Updating catalog registry",
                 "updated_at": datetime.utcnow().isoformat()
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
             
             upsert_version(
                 item_id=item_id, 
@@ -222,7 +222,7 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "updated_at": datetime.utcnow().isoformat(),
                 "result": result
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
 
             return result
         
@@ -235,5 +235,5 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
             "updated_at": datetime.utcnow().isoformat(),
             "error": str(e)
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         raise
