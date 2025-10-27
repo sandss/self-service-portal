@@ -4,11 +4,16 @@ from types import SimpleNamespace
 from typing import Any
 
 from .settings import settings
-from worker.celery_tasks import example_long_task, sync_catalog_item_from_git
+from worker.celery_tasks import (
+    example_long_task,
+    provision_server_task,
+    sync_catalog_item_from_git,
+)
 
 
 _CELERY_TASK_MAP = {
     "example_long_task": example_long_task,
+    "provision_server_task": provision_server_task,
     "sync_catalog_item_from_git": sync_catalog_item_from_git,
 }
 

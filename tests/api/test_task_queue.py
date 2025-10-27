@@ -46,6 +46,31 @@ async def test_enqueue_job_routes_to_celery(monkeypatch):
     assert dummy_arq.calls == []
 
 
+async def test_provision_server_routes_to_celery(monkeypatch):
+    dummy_arq = DummyArq()
+    captured = {}
+
+    def fake_delay(job_id, payload):
+        captured["job_id"] = job_id
+        captured["payload"] = payload
+        return SimpleNamespace(id="celery-id")
+
+    monkeypatch.setattr("worker.celery_tasks.provision_server_task.delay", fake_delay)
+
+    original_tasks = settings.CELERY_TASKS
+    settings.CELERY_TASKS = ["provision_server_task"]
+    try:
+        payload = {"server_config": {"instance_type": "c5.large"}}
+        job_id = "job-456"
+        result = await enqueue_job(dummy_arq, "provision_server_task", job_id, payload)
+    finally:
+        settings.CELERY_TASKS = original_tasks
+
+    assert captured["job_id"] == job_id
+    assert captured["payload"] == payload
+    assert result.job_id == job_id
+    assert dummy_arq.calls == []
+
 async def test_enqueue_job_falls_back_without_job_id(monkeypatch):
     dummy_arq = DummyArq()
 

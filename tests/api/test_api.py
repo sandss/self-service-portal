@@ -64,6 +64,37 @@ def test_create_job_routes_to_celery(monkeypatch, app_client: TestClient):
     assert captured["payload"]["report_type"] == "test_report"
 
 
+def test_provision_server_routes_to_celery(monkeypatch, app_client: TestClient):
+    captured = {}
+
+    def fake_delay(job_id, payload):
+        captured["job_id"] = job_id
+        captured["payload"] = payload
+        return type("Result", (), {"id": "celery-id"})()
+
+    monkeypatch.setattr("worker.celery_tasks.provision_server_task.delay", fake_delay)
+
+    original_tasks = settings.CELERY_TASKS
+    settings.CELERY_TASKS = ["provision_server_task"]
+    try:
+        response = app_client.post(
+            "/provision/server",
+            json={
+                "name": "demo",
+                "instance_type": "c5.large",
+                "region": "us-west-2",
+                "tags": {"env": "test"},
+            },
+        )
+    finally:
+        settings.CELERY_TASKS = original_tasks
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert captured["job_id"] == payload["job_id"]
+    assert captured["payload"]["service_type"] == "server_provisioning"
+
+
 def test_list_jobs(app_client: TestClient):
     response = app_client.get("/jobs")
     assert response.status_code == 200

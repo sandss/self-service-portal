@@ -3,7 +3,7 @@ import asyncio
 import fakeredis.aioredis
 
 from worker.celery_app import celery_app, create_celery_app
-from worker.celery_tasks import example_long_task
+from worker.celery_tasks import example_long_task, provision_server_task
 from worker.job_status import fetch_job_metadata
 from api.settings import settings
 
@@ -69,3 +69,38 @@ def test_example_long_task_runs_in_eager_mode(monkeypatch, celery_eager_app, fak
     assert job_meta["progress"] == 100
     assert job_meta["result"]["report_type"] == job_payload["report_type"]
     assert job_meta["type"] == "example_long_task"
+
+
+def test_provision_server_task_runs_in_eager_mode(monkeypatch, celery_eager_app, fakeredis_server):
+    async def fake_sleep(_duration):
+        return None
+
+    monkeypatch.setattr("worker.provision_server.asyncio.sleep", fake_sleep)
+
+    def fake_from_url(_url, *args, **kwargs):
+        return fakeredis.aioredis.FakeRedis(server=fakeredis_server)
+
+    monkeypatch.setattr("worker.celery_tasks.redis.from_url", fake_from_url)
+
+    payload = {
+        "service_type": "server_provisioning",
+        "server_config": {"name": "demo", "instance_type": "c5.large"},
+    }
+    job_id = "provision-job"
+
+    result = provision_server_task.delay(job_id, payload)
+    assert result.result is None
+
+    async def load_job_meta():
+        client = fakeredis.aioredis.FakeRedis(server=fakeredis_server)
+        try:
+            metadata, _ = await fetch_job_metadata(client, job_id)
+        finally:
+            await client.aclose()
+        return metadata
+
+    job_meta = asyncio.run(load_job_meta())
+
+    assert job_meta["state"] == "SUCCEEDED"
+    assert job_meta["progress"] == 100
+    assert job_meta["type"] == "provision_server"

@@ -10,7 +10,11 @@ class Settings(BaseSettings):
     CELERY_TASK_TIME_LIMIT: int = 60 * 30  # 30 minutes
     CELERY_TASK_SOFT_TIME_LIMIT: int = 60 * 25  # 25 minutes
     CELERY_BEAT_SCHEDULE_TZ: str = "UTC"
-    CELERY_TASKS: list[str] = []
+    CELERY_TASKS: list[str] = [
+        "example_long_task",
+        "sync_catalog_item_from_git",
+        "provision_server_task",
+    ]
     JOB_TTL: int = 60 * 60 * 24 * 3  # 3 days
     JOB_STATUS_PREFIX: str = "job:"
     

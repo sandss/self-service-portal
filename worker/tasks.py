@@ -1,5 +1,4 @@
 import json
-import asyncio
 import os
 import shutil
 import tempfile
@@ -14,6 +13,7 @@ from api.catalog.registry import upsert_version, sync_registry_with_local
 from api.catalog.validate import validate_manifest, validate_schema
 from .job_status import touch_job, set_status as update_job_status
 from .example_long import run_example_long_task as execute_example_long_task
+from .provision_server import run_provision_server_task
 
 
 async def set_status(arq_redis: ArqRedis, job_id: str, state: str, additional_data: Dict[str, Any] | None = None):
@@ -28,99 +28,10 @@ async def example_long_task(ctx, job_id: str, payload: dict):
 
 
 async def provision_server_task(ctx, job_id: str, payload: dict):
-    """
-    Server provisioning task that demonstrates a long-running multi-step process
-    """
-    arq_redis = ctx["redis"]
-    
-    try:
-        # Initialize job as QUEUED
-        job_meta = {
-            "id": job_id,
-            "type": "provision_server",
-            "state": "QUEUED",
-            "progress": 0,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "started_at": None,
-            "finished_at": None,
-            "params": payload,
-            "result": None,
-            "error": None
-        }
-        await touch_job(arq_redis, job_meta)
-        
-        # Mark as RUNNING
-        job_meta.update({
-            "state": "RUNNING",
-            "started_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        })
-        await touch_job(arq_redis, job_meta)
-        
-        # Simulate server provisioning steps
-        steps = [
-            ("Validating configuration", 10),
-            ("Allocating compute resources", 20),
-            ("Setting up networking", 35),
-            ("Installing operating system", 50),
-            ("Configuring security groups", 65),
-            ("Installing software packages", 80),
-            ("Running health checks", 90),
-            ("Finalizing setup", 100)
-        ]
-        
-        for step_name, progress in steps:
-            # Simulate variable step duration (2-4 seconds)
-            await asyncio.sleep(2 + (progress % 3))
-            
-            job_meta.update({
-                "progress": progress,
-                "updated_at": datetime.utcnow().isoformat(),
-                "current_step": step_name
-            })
-            await touch_job(arq_redis, job_meta)
-        
-        # Mark as SUCCEEDED
-        server_config = payload.get("server_config", {})
-        result = {
-            "message": "Server provisioned successfully",
-            "server_id": f"srv-{job_id[:8]}",
-            "instance_type": server_config.get("instance_type", "t3.medium"),
-            "region": server_config.get("region", "us-east-1"),
-            "ip_address": f"10.0.{(hash(job_id) % 254) + 1}.{(hash(job_id[:8]) % 254) + 1}",
-            "ssh_key": f"{server_config.get('name', 'server')}-key",
-            "tags": server_config.get("tags", {}),
-            "provisioned_at": datetime.utcnow().isoformat()
-        }
-        
-        job_meta.update({
-            "state": "SUCCEEDED",
-            "progress": 100,
-            "finished_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "result": result,
-            "current_step": "Completed"
-        })
-        await touch_job(arq_redis, job_meta)
-        
-    except Exception as e:
-        # Mark as FAILED
-        error_info = {
-            "error_type": type(e).__name__,
-            "error_message": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        job_meta.update({
-            "state": "FAILED",
-            "finished_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "error": error_info,
-            "current_step": "Failed"
-        })
-        await touch_job(arq_redis, job_meta)
-        raise
+    """ARQ entrypoint delegating to the shared server provisioning implementation."""
+
+    redis_client = ctx["redis"]
+    await run_provision_server_task(redis_client, job_id, payload)
 
 
 async def import_catalog_item(ctx, job_id: str, payload: dict):

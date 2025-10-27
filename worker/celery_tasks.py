@@ -10,6 +10,7 @@ import redis.asyncio as redis
 from api.settings import settings
 from .celery_app import celery_app
 from .example_long import run_example_long_task
+from .provision_server import run_provision_server_task
 from .sync_catalog_item import run_sync_catalog_item_from_git
 
 
@@ -35,6 +36,16 @@ def example_long_task(job_id: str, payload: Dict[str, Any]) -> None:
     asyncio.run(_run_example_task(job_id, payload))
 
 
+async def _run_provision_task(job_id: str, payload: Dict[str, Any]) -> None:
+    await _run_with_redis(run_provision_server_task, job_id, payload)
+
+
+@celery_app.task(name="provision_server_task")
+def provision_server_task(job_id: str, payload: Dict[str, Any]) -> None:
+    """Celery wrapper around the server provisioning job."""
+    asyncio.run(_run_provision_task(job_id, payload))
+
+
 async def _run_sync_catalog_job(job_id: str, payload: Dict[str, Any]) -> None:
     await _run_with_redis(run_sync_catalog_item_from_git, job_id, payload)
 
@@ -47,5 +58,6 @@ def sync_catalog_item_from_git(job_id: str, payload: Dict[str, Any]) -> None:
 
 __all__ = [
     "example_long_task",
+    "provision_server_task",
     "sync_catalog_item_from_git",
 ]

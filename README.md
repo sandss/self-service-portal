@@ -1,10 +1,10 @@
 # Self-Service Portal - Full Stack Demo
 
-A comprehensive self-service portal with catalog-driven job execution, real-time job monitoring, and detailed job tracking. Features React (TypeScript) → FastAPI → ARQ workers (Redis) with dynamic catalog item execution and real-time updates.
+A comprehensive self-service portal with catalog-driven job execution, real-time job monitoring, and detailed job tracking. Features React (TypeScript) → FastAPI → Celery workers (Redis) with a legacy ARQ fallback for dynamic catalog item execution and real-time updates.
 
 ## Tech Stack
 
-- **Backend**: FastAPI (Python 3.11), ARQ, Redis, Uvicorn
+- **Backend**: FastAPI (Python 3.11), Celery, ARQ (legacy), Redis, Uvicorn
 - **Frontend**: React + Vite + TypeScript + Tailwind CSS
 - **Catalog System**: Dynamic Python task execution with schema validation
 - **Orchestration**: Docker Compose
@@ -18,8 +18,8 @@ Git Repositories → Import System → Bundle Storage → Execution System
    Git Clone      ARQ Workers    .tar.gz files  catalog_local/
      ↓                ↓              ↓              ↓
 React Frontend (port 5173) → FastAPI Server (port 8000) → Redis (port 6379)
-     ↓ HTTP API calls + WebSocket    ↓ Job enqueue & Catalog management    ↓
-WebSocket ← Real-time updates ← ARQ Workers ← Dynamic task execution ← task.py files
+  ↓ HTTP API calls + WebSocket    ↓ Job dispatcher (Celery + legacy ARQ)    ↓
+WebSocket ← Real-time updates ← Celery & ARQ Workers ← Dynamic task execution ← task.py files
 ```
 
 ## Key Features
@@ -67,6 +67,7 @@ WebSocket ← Real-time updates ← ARQ Workers ← Dynamic task execution ← t
    ```bash
    docker compose up --build
    ```
+  This spins up the API, web frontend, Redis, legacy ARQ worker, and the new Celery worker + beat services so you can exercise both queueing systems locally.
 
 3. **Open the application:**
    - Frontend: http://localhost:5173
@@ -269,7 +270,7 @@ self-service-portal/
 │       ├── registry.py       # Item storage/retrieval
 │       ├── bundles.py        # Package management
 │       └── validate.py       # Schema validation
-├── worker/                    # ARQ worker
+├── worker/                    # Celery tasks + legacy ARQ worker
 │   ├── tasks.py              # Job implementations
 │   ├── catalog_execute.py    # Dynamic catalog execution
 │   ├── catalog_sync.py       # Catalog synchronization
@@ -340,6 +341,9 @@ pytest api/test_api.py -v
 ### Environment Variables
 
 - `REDIS_URL`: Redis connection string (default: `redis://localhost:6379/0`)
+- `CELERY_BROKER_URL`: Celery broker location (default: `redis://localhost:6379/0`)
+- `CELERY_RESULT_BACKEND`: Celery result backend (default: `redis://localhost:6379/1`)
+- `CELERY_TASKS`: Comma-separated task names that should be dispatched to Celery (default includes `example_long_task`, `sync_catalog_item_from_git`, `provision_server_task`)
 - `VITE_API_URL`: Frontend API base URL (default: `http://localhost:8000`)
 - `JOB_TTL`: Job data retention in Redis (default: 3 days)
 - `JOB_STATUS_PREFIX`: Redis key prefix for job status (default: `job_status:`)
@@ -395,6 +399,11 @@ pytest api/test_api.py -v
 - **Loading states**: Proper loading indicators and error handling
 - **Auto-refresh**: Jobs update in real-time without manual refresh
 - **Responsive design**: Works well on desktop and mobile
+
+### 🐇 **Queue Modernization**
+- Introduced Celery worker & beat services alongside the existing ARQ worker
+- Unified FastAPI dispatcher that routes selected tasks through Celery (configurable via `CELERY_TASKS`)
+- Added shared async runners so Celery and ARQ reuse the same job implementations
 
 ## Future Enhancements (TODOs)
 
