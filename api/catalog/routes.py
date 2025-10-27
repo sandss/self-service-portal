@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Depends, UploadFile, File, HTTPException
 from arq.connections import ArqRedis
 from datetime import datetime
 from ..deps import get_arq_pool
+from ..task_queue import enqueue_job
 from .registry import (
     list_items, list_versions, get_descriptor, resolve_latest, upsert_version,
     sync_registry_with_local, get_sync_status, migrate_legacy_local_storage,
@@ -126,7 +127,7 @@ async def api_import(body: dict = Body(...), arq: ArqRedis = Depends(get_arq_poo
         validate_schema(schema)
         
         # Queue the import job for async processing
-        job = await arq.enqueue_job(
+        job = await enqueue_job(
             "import_catalog_item_task",
             item_id=item_id,
             version=version,
@@ -201,7 +202,7 @@ async def api_git_webhook(req: Request, arq: ArqRedis = Depends(get_arq_pool)):
     if not repo_url or not tags:
         raise HTTPException(400, "repo_url and tags required")
     for t in tags:
-        await arq.enqueue_job("sync_catalog_item", repo_url=repo_url, ref=t)
+        await enqueue_job(arq, "sync_catalog_item", repo_url=repo_url, ref=t)
     return {"queued": len(tags)}
 
 # List local catalog items
@@ -311,7 +312,7 @@ async def api_sync_registry_async(arq_pool: ArqRedis = Depends(get_arq_pool)):
     job_id = str(uuid.uuid4())
     
     try:
-        await arq_pool.enqueue_job("sync_catalog_registry_task", job_id, {
+        await enqueue_job(arq_pool, "sync_catalog_registry_task", job_id, {
             "trigger": "manual",
             "requested_at": datetime.utcnow().isoformat()
         })

@@ -12,6 +12,7 @@ import redis.asyncio as redis
 from .deps import get_arq_pool
 from .settings import settings
 from .catalog.routes import router as catalog_router
+from .task_queue import enqueue_job
 from worker.job_status import touch_job, fetch_job_metadata
 
 
@@ -151,7 +152,14 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
         inputs = p.get("inputs", {})
         if not (item_id and version):
             raise HTTPException(400, "item_id and version required for catalog")
-        job = await arq_pool.enqueue_job("run_catalog_item", item_id=item_id, version=version, inputs=inputs, user_id=job_data.user_id)
+        job = await enqueue_job(
+            arq_pool,
+            "run_catalog_item",
+            item_id=item_id,
+            version=version,
+            inputs=inputs,
+            user_id=job_data.user_id,
+        )
         
         # Create proper job status record for dashboard tracking
         job_status = {
@@ -184,7 +192,7 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
     }
     
     # Enqueue the job
-    await arq_pool.enqueue_job("example_long_task", job_id, payload)
+    await enqueue_job(arq_pool, "example_long_task", job_id, payload)
     
     return JobResponse(job_id=job_id)
 
@@ -293,7 +301,7 @@ async def retry_job(job_id: str, arq_pool=Depends(get_arq_pool)):
         
         # Create new job
         new_job_id = str(uuid.uuid4())
-        await arq_pool.enqueue_job("example_long_task", new_job_id, params)
+        await enqueue_job(arq_pool, "example_long_task", new_job_id, params)
         
         return JobResponse(job_id=new_job_id)
     
@@ -356,7 +364,7 @@ async def seed_jobs(arq_pool=Depends(get_arq_pool)):
     job_ids = []
     for job_data in demo_jobs:
         job_id = str(uuid.uuid4())
-        await arq_pool.enqueue_job("example_long_task", job_id, job_data)
+        await enqueue_job(arq_pool, "example_long_task", job_id, job_data)
         job_ids.append(job_id)
     
     return {"message": f"Seeded {len(job_ids)} demo jobs", "job_ids": job_ids}
@@ -379,7 +387,7 @@ async def provision_server(request: ServerProvisionRequest, arq_pool=Depends(get
     }
     
     # Enqueue the server provisioning job
-    await arq_pool.enqueue_job("provision_server_task", job_id, payload)
+    await enqueue_job(arq_pool, "provision_server_task", job_id, payload)
     
     return JobResponse(job_id=job_id)
 

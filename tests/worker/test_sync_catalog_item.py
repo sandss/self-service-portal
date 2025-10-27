@@ -10,6 +10,14 @@ from worker.job_status import fetch_job_metadata
 from worker.sync_catalog_item import run_sync_catalog_item_from_git
 
 
+pytestmark = pytest.mark.anyio("asyncio")
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 class _ConstTempDir:
     def __init__(self, path: str):
         self._path = path
@@ -21,7 +29,6 @@ class _ConstTempDir:
         return False
 
 
-@pytest.mark.asyncio
 async def test_run_sync_catalog_item_from_git_success(monkeypatch, tmp_path, fakeredis_server):
     job_id = "job-sync-test"
     payload = {

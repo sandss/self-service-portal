@@ -36,6 +36,34 @@ def test_create_and_get_job(app_client: TestClient):
         assert response.status_code == 404
 
 
+def test_create_job_routes_to_celery(monkeypatch, app_client: TestClient):
+    job_data = {
+        "report_type": "test_report",
+        "parameters": {"alpha": 1},
+        "user_id": "celery-user",
+    }
+
+    captured = {}
+
+    def fake_delay(job_id, payload):
+        captured["job_id"] = job_id
+        captured["payload"] = payload
+        return type("Result", (), {"id": "celery-id"})()
+
+    monkeypatch.setattr("worker.celery_tasks.example_long_task.delay", fake_delay)
+
+    original_tasks = settings.CELERY_TASKS
+    settings.CELERY_TASKS = ["example_long_task"]
+    try:
+        response = app_client.post("/jobs", json=job_data)
+    finally:
+        settings.CELERY_TASKS = original_tasks
+
+    assert response.status_code == 200
+    assert captured["job_id"]
+    assert captured["payload"]["report_type"] == "test_report"
+
+
 def test_list_jobs(app_client: TestClient):
     response = app_client.get("/jobs")
     assert response.status_code == 200
