@@ -25,3 +25,8 @@ def test_create_celery_app_returns_new_instance():
         assert new_app.conf.result_backend == settings.CELERY_RESULT_BACKEND
     finally:
         new_app.close()
+
+
+def test_celery_eager_fixture_sets_synchronous_mode(celery_eager_app):
+    assert celery_eager_app.conf.task_always_eager is True
+    assert celery_eager_app.conf.task_eager_propagates is True

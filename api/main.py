@@ -12,6 +12,7 @@ import redis.asyncio as redis
 from .deps import get_arq_pool
 from .settings import settings
 from .catalog.routes import router as catalog_router
+from worker.job_status import touch_job, fetch_job_metadata
 
 
 app = FastAPI(title="Jobs Dashboard API", version="1.0.0")
@@ -67,6 +68,29 @@ class JobList(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+def _normalize_job_meta(raw: Dict[str, Any], job_id: str) -> Dict[str, Any]:
+    job = dict(raw) if raw else {}
+    job.setdefault("id", job_id)
+    job.setdefault("type", "unknown")
+    job.setdefault("state", "UNKNOWN")
+
+    if not job.get("created_at"):
+        job["created_at"] = job.get("updated_at", datetime.utcnow().isoformat())
+    if not job.get("updated_at"):
+        job["updated_at"] = job["created_at"]
+
+    progress = job.get("progress")
+    if isinstance(progress, str):
+        try:
+            job["progress"] = float(progress)
+        except ValueError:
+            job["progress"] = 0.0
+    elif progress is None:
+        job["progress"] = 0.0
+
+    return job
 
 
 # Pydantic models for self-service
@@ -149,19 +173,7 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
             "error": None
         }
         
-        # Convert data to hash format (same as git import)
-        hash_data = {}
-        for key, value in job_status.items():
-            if value is None:
-                continue
-            elif key in ["params", "result", "error"]:
-                hash_data[key] = json.dumps(value)
-            else:
-                hash_data[key] = str(value)
-        
-        job_key = f"{settings.JOB_STATUS_PREFIX}{job.job_id}"
-        await arq_pool.hset(job_key, mapping=hash_data)
-        await arq_pool.expire(job_key, settings.JOB_TTL)
+        await touch_job(arq_pool, job_status)
         return JobResponse(job_id=job.job_id)
     
     # Handle regular jobs
@@ -205,55 +217,20 @@ async def list_jobs(
         job_ids = await redis_client.zrevrange(index_key, start, end)
         
         jobs = []
-        for job_id in job_ids:
-            job_key = f"{settings.JOB_STATUS_PREFIX}{job_id.decode()}"
-            job_data = await redis_client.hgetall(job_key)
-            
-            if not job_data:
+        for raw_job_id in job_ids:
+            job_id = raw_job_id.decode() if isinstance(raw_job_id, bytes) else str(raw_job_id)
+            job_meta, _ = await fetch_job_metadata(redis_client, job_id)
+
+            if not job_meta:
                 continue
-                
-            # Decode job data
-            job_dict = {}
-            for key, value in job_data.items():
-                key_str = key.decode() if isinstance(key, bytes) else key
-                value_str = value.decode() if isinstance(value, bytes) else value
-                
-                # Handle multiple levels of byte string encoding
-                if isinstance(value_str, str):
-                    # Remove b"b'..'" wrapper if present
-                    if value_str.startswith('b"b\'') and value_str.endswith('\'"'):
-                        value_str = value_str[4:-2]
-                    # Remove b'...' wrapper if present
-                    elif value_str.startswith("b'") and value_str.endswith("'"):
-                        value_str = value_str[2:-1]
-                
-                if key_str in ["params", "result", "error"] and value_str:
-                    try:
-                        job_dict[key_str] = json.loads(value_str)
-                    except json.JSONDecodeError:
-                        job_dict[key_str] = None
-                elif key_str == "progress":
-                    try:
-                        job_dict[key_str] = float(value_str) if value_str else 0.0
-                    except (ValueError, TypeError):
-                        job_dict[key_str] = 0.0
-                else:
-                    job_dict[key_str] = value_str
-            
-            # Ensure required fields are present
-            if "type" not in job_dict:
-                job_dict["type"] = "unknown"
-            if "created_at" not in job_dict:
-                job_dict["created_at"] = job_dict.get("updated_at", datetime.utcnow().isoformat())
-            if "progress" not in job_dict:
-                job_dict["progress"] = 0.0
-            
-            # Apply search filter
+
+            job_dict = _normalize_job_meta(job_meta, job_id)
+
             if q:
-                if q.lower() not in job_dict.get("id", "").lower() and \
-                   q.lower() not in job_dict.get("type", "").lower():
+                text = f"{job_dict.get('id', '')} {job_dict.get('type', '')}".lower()
+                if q.lower() not in text:
                     continue
-            
+
             jobs.append(JobDetail(**job_dict))
         
         return JobList(
@@ -273,45 +250,13 @@ async def get_job(job_id: str):
     redis_client = await get_redis_client()
     
     try:
-        job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
-        job_data = await redis_client.hgetall(job_key)
-        
-        if not job_data:
+        job_meta, _ = await fetch_job_metadata(redis_client, job_id)
+
+        if not job_meta:
             raise HTTPException(status_code=404, detail="Job not found")
-        
-        # Decode job data
-        job_dict = {}
-        for key, value in job_data.items():
-            key_str = key.decode() if isinstance(key, bytes) else key
-            value_str = value.decode() if isinstance(value, bytes) else value
-            
-            if key_str in ["params", "result", "error"] and value_str:
-                try:
-                    job_dict[key_str] = json.loads(value_str)
-                except json.JSONDecodeError:
-                    job_dict[key_str] = None
-            elif key_str == "progress":
-                try:
-                    job_dict[key_str] = float(value_str) if value_str else 0.0
-                except (ValueError, TypeError):
-                    job_dict[key_str] = 0.0
-            else:
-                job_dict[key_str] = value_str
-        
-        # Ensure required fields are present
-        if "id" not in job_dict:
-            job_dict["id"] = job_id
-        if "type" not in job_dict:
-            job_dict["type"] = "unknown"
-        if "state" not in job_dict:
-            job_dict["state"] = "UNKNOWN"
-        if "progress" not in job_dict:
-            job_dict["progress"] = 0.0
-        if "created_at" not in job_dict:
-            job_dict["created_at"] = job_dict.get("updated_at", datetime.utcnow().isoformat())
-        if "updated_at" not in job_dict:
-            job_dict["updated_at"] = datetime.utcnow().isoformat()
-        
+
+        job_dict = _normalize_job_meta(job_meta, job_id)
+
         return JobDetail(**job_dict)
     
     except HTTPException:

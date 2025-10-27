@@ -1,7 +1,5 @@
 import json
-import time
 import uuid
-from datetime import datetime
 from types import SimpleNamespace
 
 import fakeredis.aioredis
@@ -11,7 +9,7 @@ from fastapi.testclient import TestClient
 from api import main as main_module
 from api.deps import get_arq_pool
 from api.main import app
-from api.settings import settings
+from worker.celery_app import celery_app
 
 
 class FakeArqPool:
@@ -24,30 +22,13 @@ class FakeArqPool:
         return fakeredis.aioredis.FakeRedis(server=self._server)
 
     async def enqueue_job(self, job_name, *args, **kwargs):
-        redis_client = self._client()
-        try:
-            job_id = kwargs.get("job_id")
-            if not job_id and args:
-                job_id = args[0]
-            if not job_id:
-                job_id = str(uuid.uuid4())
+        job_id = kwargs.get("job_id")
+        if not job_id and args:
+            job_id = args[0]
+        if not job_id:
+            job_id = str(uuid.uuid4())
 
-            timestamp = time.time()
-            now_iso = datetime.utcnow().isoformat()
-            job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
-
-            await redis_client.hset(job_key, mapping={
-                "id": job_id,
-                "state": "QUEUED",
-                "type": job_name,
-                "progress": "0",
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            })
-            await redis_client.zadd("jobs:index", {job_id: timestamp})
-            return SimpleNamespace(job_id=job_id)
-        finally:
-            await redis_client.aclose()
+        return SimpleNamespace(job_id=str(job_id))
 
     async def hset(self, key, mapping):
         redis_client = self._client()
@@ -70,6 +51,27 @@ class FakeArqPool:
         redis_client = self._client()
         try:
             await redis_client.expire(key, ttl)
+        finally:
+            await redis_client.aclose()
+
+    async def zadd(self, key, mapping):
+        redis_client = self._client()
+        try:
+            await redis_client.zadd(key, mapping)
+        finally:
+            await redis_client.aclose()
+
+    async def zrem(self, key, member):
+        redis_client = self._client()
+        try:
+            await redis_client.zrem(key, member)
+        finally:
+            await redis_client.aclose()
+
+    async def publish(self, channel, message):
+        redis_client = self._client()
+        try:
+            await redis_client.publish(channel, message)
         finally:
             await redis_client.aclose()
 
@@ -115,3 +117,18 @@ def app_client(fakeredis_server):
         client.close()
         app.dependency_overrides.clear()
         main_module.get_redis_client = original_get_redis_client
+
+
+@pytest.fixture
+def celery_eager_app():
+    original_always_eager = celery_app.conf.task_always_eager
+    original_eager_propagates = celery_app.conf.task_eager_propagates
+
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+
+    try:
+        yield celery_app
+    finally:
+        celery_app.conf.task_always_eager = original_always_eager
+        celery_app.conf.task_eager_propagates = original_eager_propagates

@@ -1,5 +1,4 @@
 import json
-import time
 import asyncio
 import os
 import shutil
@@ -8,223 +7,24 @@ import yaml
 from datetime import datetime
 from typing import Dict, Any
 from arq import ArqRedis
-from api.settings import settings
 
 # Add catalog imports
 from api.catalog.bundles import load_descriptor_from_dir, pack_dir, write_blob
 from api.catalog.registry import upsert_version, sync_registry_with_local
 from api.catalog.validate import validate_manifest, validate_schema
+from .job_status import touch_job, set_status as update_job_status
+from .example_long import run_example_long_task as execute_example_long_task
 
 
-async def set_status(arq_redis: ArqRedis, job_id: str, state: str, additional_data: Dict[str, Any] = None):
-    """Simple helper to update job status - used by catalog_execute"""
-    # Get existing job data
-    job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
-    
-    # Try to get as hash first, then as string if that fails
-    try:
-        existing_data = await arq_redis.hgetall(job_key)
-        if not existing_data:
-            # Try to get as string (for initial QUEUED state set by API)
-            existing_str = await arq_redis.get(job_key)
-            if existing_str:
-                existing_data = json.loads(existing_str)
-            else:
-                existing_data = {}
-    except Exception:
-        # If hash fails, try as string
-        try:
-            existing_str = await arq_redis.get(job_key)
-            existing_data = json.loads(existing_str) if existing_str else {}
-        except Exception:
-            existing_data = {}
-    
-    # Create job metadata with new state
-    job_meta = {
-        "id": job_id,
-        "state": state,
-        "updated_at": datetime.utcnow().isoformat()
-    }
-    
-    # Add existing data if available, but don't override the new state
-    if existing_data:
-        for key, value in existing_data.items():
-            # Decode bytes to string if needed
-            if isinstance(key, bytes):
-                key = key.decode('utf-8')
-            if isinstance(value, bytes):
-                value = value.decode('utf-8')
-            
-            # Skip overriding the state we just set
-            if key == "state":
-                continue
-                
-            # Handle nested byte encoding (b"b'...'")
-            if isinstance(value, str):
-                if value.startswith('b"b\'') and value.endswith('\'"'):
-                    value = value[4:-2]
-                elif value.startswith("b'") and value.endswith("'"):
-                    value = value[2:-1]
-            
-            if key in ["params", "result", "error"] and value:
-                try:
-                    job_meta[key] = json.loads(value)
-                except (json.JSONDecodeError, TypeError):
-                    job_meta[key] = value
-            else:
-                job_meta[key] = value
-    
-    # Add additional data
-    if additional_data:
-        job_meta.update(additional_data)
-    
-    # Set timestamps based on state
-    if state == "RUNNING" and "started_at" not in job_meta:
-        job_meta["started_at"] = datetime.utcnow().isoformat()
-    elif state in ["SUCCEEDED", "FAILED"] and "finished_at" not in job_meta:
-        job_meta["finished_at"] = datetime.utcnow().isoformat()
-    
-    # Delete the old key if it was a string
-    if not isinstance(existing_data, dict) or (existing_data and "id" not in existing_data):
-        await arq_redis.delete(job_key)
-    
-    # Use the existing _touch function to update the job
-    await _touch(arq_redis, job_meta)
-
-
-async def _publish(arq_redis: ArqRedis, payload: Dict[str, Any]):
-    """Publish message to Redis channel:jobs"""
-    # Clean payload to ensure JSON serializability
-    def clean_for_json(obj):
-        if isinstance(obj, dict):
-            return {str(k): clean_for_json(v) for k, v in obj.items() if v is not None}
-        elif isinstance(obj, (list, tuple)):
-            return [clean_for_json(item) for item in obj]
-        elif isinstance(obj, bytes):
-            return obj.decode('utf-8', errors='replace')
-        elif isinstance(obj, (str, int, float, bool)) or obj is None:
-            return obj
-        else:
-            return str(obj)
-    
-    cleaned_payload = clean_for_json(payload)
-    await arq_redis.publish("channel:jobs", json.dumps(cleaned_payload))
-
-
-async def _touch(arq_redis: ArqRedis, job_meta: Dict[str, Any]):
-    """Update job metadata in Redis and publish update"""
-    job_id = job_meta["id"]
-    
-    # Prepare data for Redis hash - ensure all values are strings
-    hash_data = {}
-    for key, value in job_meta.items():
-        if value is None:
-            continue
-        elif key in ["params", "result", "error"]:
-            # Serialize complex objects to JSON strings
-            hash_data[key] = json.dumps(value)
-        else:
-            # Convert all other values to strings
-            hash_data[key] = str(value)
-    
-    # Store job data
-    job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
-    await arq_redis.hset(job_key, mapping=hash_data)
-    
-    # Update indexes
-    await arq_redis.zadd("jobs:index", {job_id: int(time.time())})
-    state = job_meta.get("state", "UNKNOWN")
-    await arq_redis.zadd(f"jobs:index:state:{state}", {job_id: int(time.time())})
-    
-    # Remove from other state indexes
-    for other_state in ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"]:
-        if other_state != state:
-            await arq_redis.zrem(f"jobs:index:state:{other_state}", job_id)
-    
-    # Set expiration
-    await arq_redis.expire(job_key, settings.JOB_TTL)
-    
-    # Publish update
-    await _publish(arq_redis, {
-        "type": "upsert",
-        "job": job_meta
-    })
+async def set_status(arq_redis: ArqRedis, job_id: str, state: str, additional_data: Dict[str, Any] | None = None):
+    """Compatibility shim that delegates to shared job status helper."""
+    return await update_job_status(arq_redis, job_id, state, additional_data)
 
 
 async def example_long_task(ctx, job_id: str, payload: dict):
-    """
-    Example long-running task that demonstrates job state transitions
-    """
+    """Example long-running task executed via ARQ."""
     arq_redis = ctx["redis"]
-    
-    try:
-        # Initialize job as QUEUED
-        job_meta = {
-            "id": job_id,
-            "type": "example_long_task",
-            "state": "QUEUED",
-            "progress": 0,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "started_at": None,
-            "finished_at": None,
-            "params": payload,
-            "result": None,
-            "error": None
-        }
-        await _touch(arq_redis, job_meta)
-        
-        # Mark as RUNNING
-        job_meta.update({
-            "state": "RUNNING",
-            "started_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        })
-        await _touch(arq_redis, job_meta)
-        
-        # Simulate work with progress updates
-        for i in range(1, 6):
-            await asyncio.sleep(1)
-            progress = (i / 5) * 100
-            job_meta.update({
-                "progress": progress,
-                "updated_at": datetime.utcnow().isoformat()
-            })
-            await _touch(arq_redis, job_meta)
-        
-        # Mark as SUCCEEDED
-        result = {
-            "message": "Task completed successfully",
-            "processed_items": 100,
-            "report_type": payload.get("report_type", "default"),
-            "completion_time": datetime.utcnow().isoformat()
-        }
-        
-        job_meta.update({
-            "state": "SUCCEEDED",
-            "progress": 100,
-            "finished_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "result": result
-        })
-        await _touch(arq_redis, job_meta)
-        
-    except Exception as e:
-        # Mark as FAILED
-        error_info = {
-            "error_type": type(e).__name__,
-            "error_message": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        job_meta.update({
-            "state": "FAILED",
-            "finished_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "error": error_info
-        })
-        await _touch(arq_redis, job_meta)
-        raise
+    await execute_example_long_task(arq_redis, job_id, payload)
 
 
 async def provision_server_task(ctx, job_id: str, payload: dict):
@@ -248,7 +48,7 @@ async def provision_server_task(ctx, job_id: str, payload: dict):
             "result": None,
             "error": None
         }
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Mark as RUNNING
         job_meta.update({
@@ -256,7 +56,7 @@ async def provision_server_task(ctx, job_id: str, payload: dict):
             "started_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Simulate server provisioning steps
         steps = [
@@ -279,7 +79,7 @@ async def provision_server_task(ctx, job_id: str, payload: dict):
                 "updated_at": datetime.utcnow().isoformat(),
                 "current_step": step_name
             })
-            await _touch(arq_redis, job_meta)
+            await touch_job(arq_redis, job_meta)
         
         # Mark as SUCCEEDED
         server_config = payload.get("server_config", {})
@@ -302,7 +102,7 @@ async def provision_server_task(ctx, job_id: str, payload: dict):
             "result": result,
             "current_step": "Completed"
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
     except Exception as e:
         # Mark as FAILED
@@ -319,7 +119,7 @@ async def provision_server_task(ctx, job_id: str, payload: dict):
             "error": error_info,
             "current_step": "Failed"
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         raise
 
 
@@ -345,17 +145,17 @@ async def import_catalog_item(ctx, job_id: str, payload: dict):
             "result": None,
             "error": None
         }
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Mark as RUNNING
         job_meta["state"] = "RUNNING"
         job_meta["started_at"] = datetime.utcnow().isoformat()
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Create temporary directory for import
         tmp_dir = tempfile.mkdtemp(prefix="catalog_import_")
         job_meta["temp_dir"] = tmp_dir
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Download and extract the catalog item bundle
         bundle_url = payload.get("bundle_url")
@@ -388,7 +188,7 @@ async def import_catalog_item(ctx, job_id: str, payload: dict):
         job_meta["progress"] = 100
         job_meta["finished_at"] = datetime.utcnow().isoformat()
         job_meta["result"] = {"message": "Catalog item imported successfully"}
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
     except Exception as e:
         # Mark as FAILED
@@ -401,7 +201,7 @@ async def import_catalog_item(ctx, job_id: str, payload: dict):
         job_meta["state"] = "FAILED"
         job_meta["finished_at"] = datetime.utcnow().isoformat()
         job_meta["error"] = error_info
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         raise
     
     finally:
@@ -498,7 +298,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "result": None,
             "error": None
         }
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Mark as RUNNING
         job_meta.update({
@@ -507,7 +307,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "updated_at": datetime.utcnow().isoformat(),
             "current_step": "Starting import"
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Extract payload data
         item_id = payload.get("item_id")
@@ -524,7 +324,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "current_step": "Validating input data",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         if not item_id or not version or not schema:
             raise ValueError("item_id, version, and schema are required")
@@ -538,7 +338,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "current_step": "Preparing local storage directory",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Create local directory structure: /app/catalog_local/items/{item_id}/{version}/
         local_base_dir = "/app/catalog_local/items"
@@ -551,7 +351,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "current_step": "Saving files to local storage",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Write manifest.yaml
         manifest_path = os.path.join(item_local_dir, "manifest.yaml")
@@ -592,7 +392,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "current_step": "Packing and storing in registry",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Pack the directory for blob storage
         blob = pack_dir(item_local_dir)
@@ -604,7 +404,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "current_step": "Updating registry",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Update the registry
         metadata = {
@@ -633,7 +433,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "updated_at": datetime.utcnow().isoformat(),
             "result": result
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
     except Exception as e:
         # Mark as FAILED
@@ -650,7 +450,7 @@ async def import_catalog_item_task(ctx, job_id: str, payload: dict):
             "error": error_info,
             "current_step": "Failed"
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         raise
 
 
@@ -675,7 +475,7 @@ async def sync_catalog_registry_task(ctx, job_id: str, payload: dict):
             "result": None,
             "error": None
         }
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Mark as RUNNING
         job_meta.update({
@@ -684,7 +484,7 @@ async def sync_catalog_registry_task(ctx, job_id: str, payload: dict):
             "updated_at": datetime.utcnow().isoformat(),
             "current_step": "Starting registry sync"
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Step 1: Check sync status (20%)
         job_meta.update({
@@ -692,7 +492,7 @@ async def sync_catalog_registry_task(ctx, job_id: str, payload: dict):
             "current_step": "Checking sync status",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         # Step 2: Perform sync (80%)
         job_meta.update({
@@ -700,7 +500,7 @@ async def sync_catalog_registry_task(ctx, job_id: str, payload: dict):
             "current_step": "Synchronizing registry with local files",
             "updated_at": datetime.utcnow().isoformat()
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
         sync_report = sync_registry_with_local()
         
@@ -719,7 +519,7 @@ async def sync_catalog_registry_task(ctx, job_id: str, payload: dict):
             "updated_at": datetime.utcnow().isoformat(),
             "result": result
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         
     except Exception as e:
         # Mark as FAILED
@@ -736,5 +536,5 @@ async def sync_catalog_registry_task(ctx, job_id: str, payload: dict):
             "error": error_info,
             "current_step": "Failed"
         })
-        await _touch(arq_redis, job_meta)
+        await touch_job(arq_redis, job_meta)
         raise
