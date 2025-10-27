@@ -33,4 +33,7 @@ def create_celery_app() -> Celery:
 
 celery_app = create_celery_app()
 
+# Import task modules so Celery registers them on import.
+from . import celery_tasks  # noqa: E402,F401
+
 __all__ = ["celery_app", "create_celery_app"]

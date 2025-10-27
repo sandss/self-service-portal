@@ -1,6 +1,14 @@
-import os, io, tarfile, tempfile, json, yaml, subprocess
+import io
+import json
+import os
+import subprocess
+import tarfile
+import tempfile
 from datetime import datetime
-from arq.connections import ArqRedis
+from typing import Any, Callable, Dict
+
+import yaml
+
 from api.catalog.descriptor_utils import atomic_write
 from api.catalog.registry import upsert_version
 from worker.job_status import touch_job
@@ -36,173 +44,185 @@ def load_descriptor_from_dir(path: str):
     
     return manifest, schema, ui
 
-async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
-    """
-    Sync catalog item from Git repository.
-    Clones repo at specific tag or branch, validates structure, and imports item.
-    """
-    # Get the job context for status updates
-    arq_redis = ctx["redis"]
-    
-    # Extract parameters from payload
+def _default_now() -> datetime:
+    return datetime.utcnow()
+
+
+def _default_git_runner(args: tuple[str, ...], *, cwd: str) -> str:
+    result = subprocess.run(
+        args,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr}")
+    return result.stdout
+
+
+async def run_sync_catalog_item_from_git(
+    redis_client,
+    job_id: str,
+    payload: Dict[str, Any],
+    *,
+    git_runner: Callable[[tuple[str, ...], str], str] | None = None,
+    tempdir_factory: Callable[[], Any] | None = None,
+    now: Callable[[], datetime] | None = None,
+    atomic_write_func: Callable[[str, bytes], None] | None = None,
+    upsert_version_func: Callable[..., Any] | None = None,
+):
+    """Shared async implementation for syncing a catalog item from Git."""
+
+    git_runner = git_runner or (lambda args, cwd: _default_git_runner(args, cwd=cwd))
+    tempdir_factory = tempdir_factory or tempfile.TemporaryDirectory
+    now = now or _default_now
+    atomic_write_func = atomic_write_func or atomic_write
+    upsert_version_func = upsert_version_func or upsert_version
+
     repo_url = payload["repo_url"]
     ref = payload["ref"]
-    item_name = payload["item_name"]
-    
+    payload_copy = dict(payload)
+
+    item_id, git_ref = parse_tag(ref)
+    payload_copy.setdefault("item_id", item_id)
+
+    job_meta = {
+        "id": job_id,
+        "type": "git_import",
+        "state": "RUNNING",
+        "progress": 0,
+        "created_at": now().isoformat(),
+        "updated_at": now().isoformat(),
+        "started_at": now().isoformat(),
+        "finished_at": None,
+        "params": payload_copy,
+        "result": None,
+        "error": None,
+        "current_step": "Starting git import",
+    }
+
+    await touch_job(redis_client, job_meta)
+
     try:
-        # Initialize job metadata
-        job_meta = {
-            "id": job_id,
-            "type": "git_import",
-            "state": "RUNNING",
-            "progress": 0,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "started_at": datetime.utcnow().isoformat(),
-            "finished_at": None,
-            "params": payload,
-            "result": None,
-            "error": None,
-            "current_step": "Starting git import"
-        }
-        await touch_job(arq_redis, job_meta)
-    
-        item_id, git_ref = parse_tag(ref)
-    
-        with tempfile.TemporaryDirectory() as td:
-            def run(*args):
-                """Helper to run git commands"""
-                result = subprocess.run(
-                    args, cwd=td, 
-                    stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE, 
-                    text=True
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr}")
-                return result.stdout
-        
-            # Clone the repository
+        with tempdir_factory() as td:
             job_meta.update({
                 "progress": 10,
                 "current_step": "Cloning repository",
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": now().isoformat(),
             })
-            await touch_job(arq_redis, job_meta)
-            
-            run("git", "init")
-            run("git", "remote", "add", "origin", repo_url)
-        
-            # Try to fetch as tag first, then as branch if tag fails
+            await touch_job(redis_client, job_meta)
+
+            git_runner(("git", "init"), td)
+            git_runner(("git", "remote", "add", "origin", repo_url), td)
+
             try:
-                # Try fetching as a tag (for version releases)
-                run("git", "fetch", "--depth", "1", "--tags", "origin", git_ref)
-                run("git", "checkout", "FETCH_HEAD")
+                git_runner(("git", "fetch", "--depth", "1", "--tags", "origin", git_ref), td)
+                git_runner(("git", "checkout", "FETCH_HEAD"), td)
                 print(f"✅ Checked out tag: {git_ref}")
-            except RuntimeError:
+            except RuntimeError as tag_error:
                 try:
-                    # Try fetching as a branch (for development/latest)
-                    run("git", "fetch", "--depth", "1", "origin", git_ref)
-                    run("git", "checkout", "FETCH_HEAD")
+                    git_runner(("git", "fetch", "--depth", "1", "origin", git_ref), td)
+                    git_runner(("git", "checkout", "FETCH_HEAD"), td)
                     print(f"✅ Checked out branch: {git_ref}")
-                except RuntimeError as e:
-                    raise RuntimeError(f"Failed to fetch '{git_ref}' as tag or branch: {e}")
-            
+                except RuntimeError as branch_error:
+                    raise RuntimeError(
+                        f"Failed to fetch '{git_ref}' as tag or branch: {branch_error}"
+                    ) from tag_error
+
             job_meta.update({
                 "progress": 30,
                 "current_step": "Processing repository structure",
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": now().isoformat(),
             })
-            await touch_job(arq_redis, job_meta)
-            
-            # Find item directory - support both flat and nested structures
+            await touch_job(redis_client, job_meta)
+
             try:
                 print(f"🔍 Temp directory contents: {os.listdir(td)}")
-            except Exception as e:
-                print(f"🔍 Error listing temp directory: {e}")
+            except Exception as exc:  # pragma: no cover - debugging aid
+                print(f"🔍 Error listing temp directory: {exc}")
+
             item_dir = os.path.join(td, ITEMS_SUBDIR, item_id)
             print(f"🔍 Looking for nested structure at: {item_dir}")
             if not os.path.isdir(item_dir):
-                # Try flat structure (item files directly in repo root)
                 item_dir = td
                 print(f"🔍 Using flat structure at: {item_dir}")
                 try:
                     print(f"🔍 Flat directory contents: {os.listdir(item_dir)}")
-                except Exception as e:
-                    print(f"🔍 Error listing flat directory: {e}")
-                # Verify this is a catalog item by checking for required files
-                if not (os.path.exists(os.path.join(item_dir, "manifest.yaml")) and 
-                        os.path.exists(os.path.join(item_dir, "schema.json"))):
-                    raise FileNotFoundError(f"Neither {ITEMS_SUBDIR}/{item_id} nor catalog item files found in repository")
-                print(f"✅ Using flat repository structure")
+                except Exception as exc:  # pragma: no cover - debugging aid
+                    print(f"🔍 Error listing flat directory: {exc}")
+                if not (
+                    os.path.exists(os.path.join(item_dir, "manifest.yaml"))
+                    and os.path.exists(os.path.join(item_dir, "schema.json"))
+                ):
+                    raise FileNotFoundError(
+                        f"Neither {ITEMS_SUBDIR}/{item_id} nor catalog item files found in repository"
+                    )
+                print("✅ Using flat repository structure")
             else:
                 print(f"✅ Using nested repository structure: {ITEMS_SUBDIR}/{item_id}")
 
-            # Determine version from git ref or manifest
-            if git_ref.replace('v', '').replace('.', '').replace('-', '').isalnum():
-                # Looks like a version tag (e.g., "1.2.1", "v1.2.1")
-                version = git_ref.lstrip('v')
+            if git_ref.replace("v", "").replace(".", "").replace("-", "").isalnum():
+                version = git_ref.lstrip("v")
             else:
-                # Branch checkout - read version from manifest
                 manifest, _, _ = load_descriptor_from_dir(item_dir)
-                version = manifest.get('version', 'latest')
-        
-            # Load and validate descriptors
+                version = manifest.get("version", "latest")
+
             job_meta.update({
                 "progress": 50,
                 "current_step": "Validating catalog item",
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": now().isoformat(),
             })
-            await touch_job(arq_redis, job_meta)
-            
+            await touch_job(redis_client, job_meta)
+
             manifest, schema, ui = load_descriptor_from_dir(item_dir)
-            
-            # Validate manifest matches tag
+
             manifest_id = manifest.get("id") or manifest.get("name")
             manifest_version = manifest.get("version")
-            
+
             if manifest_id != item_id:
-                raise ValueError(f"manifest id/name '{manifest_id}' must match item_id '{item_id}' from tag {ref}")
+                raise ValueError(
+                    f"manifest id/name '{manifest_id}' must match item_id '{item_id}' from tag {ref}"
+                )
             if manifest_version != version:
-                raise ValueError(f"manifest version '{manifest_version}' must match version '{version}' from tag {ref}")
-            
-            # Pack item directory
+                raise ValueError(
+                    f"manifest version '{manifest_version}' must match version '{version}' from tag {ref}"
+                )
+
             job_meta.update({
                 "progress": 70,
                 "current_step": "Creating bundle",
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": now().isoformat(),
             })
-            await touch_job(arq_redis, job_meta)
-            
+            await touch_job(redis_client, job_meta)
+
             bundle_bytes = pack_dir(item_dir)
-            
-            # Save bundle
+
             os.makedirs(BUNDLES_DIR, exist_ok=True)
             bundle_path = os.path.join(BUNDLES_DIR, f"{item_id}@{version}.tar.gz")
-            atomic_write(bundle_path, bundle_bytes)
-            
-            # Update registry with dual-write (JSON + DB)
+            atomic_write_func(bundle_path, bundle_bytes)
+
             job_meta.update({
                 "progress": 90,
                 "current_step": "Updating catalog registry",
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": now().isoformat(),
             })
-            await touch_job(arq_redis, job_meta)
-            
-            upsert_version(
-                item_id=item_id, 
-                version=version, 
-                manifest=manifest, 
-                schema=schema, 
-                ui=ui, 
+            await touch_job(redis_client, job_meta)
+
+            upsert_version_func(
+                item_id=item_id,
+                version=version,
+                manifest=manifest,
+                schema=schema,
+                ui=ui,
                 storage_uri=bundle_path,
                 source={
                     "source": "git-sync",
-                    "repo": repo_url, 
-                    "ref": ref, 
+                    "repo": repo_url,
+                    "ref": ref,
                     "path": f"{ITEMS_SUBDIR}/{item_id}",
-                    "sync_timestamp": datetime.utcnow().isoformat()
-                }
+                    "sync_timestamp": now().isoformat(),
+                },
             )
 
             result = {
@@ -210,30 +230,34 @@ async def sync_catalog_item_from_git(ctx, job_id: str, payload: dict):
                 "version": version,
                 "bundle_path": bundle_path,
                 "repo_url": repo_url,
-                "ref": ref
+                "ref": ref,
             }
-            
-            # Mark job as completed
+
             job_meta.update({
                 "state": "SUCCEEDED",
                 "progress": 100,
                 "current_step": "Completed",
-                "finished_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-                "result": result
+                "finished_at": now().isoformat(),
+                "updated_at": now().isoformat(),
+                "result": result,
             })
-            await touch_job(arq_redis, job_meta)
-
+            await touch_job(redis_client, job_meta)
             return result
-        
-    except Exception as e:
-        # Mark job as failed
+
+    except Exception as exc:
         job_meta.update({
             "state": "FAILED",
             "progress": 0,
-            "finished_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "error": str(e)
+            "finished_at": now().isoformat(),
+            "updated_at": now().isoformat(),
+            "error": str(exc),
         })
-        await touch_job(arq_redis, job_meta)
+        await touch_job(redis_client, job_meta)
         raise
+
+
+async def sync_catalog_item_from_git(ctx, job_id: str, payload: Dict[str, Any]):
+    """ARQ entrypoint delegating to the shared Git sync implementation."""
+
+    redis_client = ctx["redis"]
+    await run_sync_catalog_item_from_git(redis_client, job_id, payload)
