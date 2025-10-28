@@ -32,24 +32,23 @@ def _infer_job_id(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
     return kwargs.get("job_id")
 
 
-def _should_use_celery(task_name: str, job_id: Any | None) -> bool:
+def _get_celery_task(task_name: str):
     if task_name not in settings.CELERY_TASKS:
-        return False
-    if task_name not in _CELERY_TASK_MAP:
-        return False
-    if job_id is None:
-        return False
-    return True
+        raise ValueError(f"Task '{task_name}' is not enabled for Celery dispatch")
+    try:
+        return _CELERY_TASK_MAP[task_name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown Celery task '{task_name}'") from exc
 
 
-async def enqueue_job(arq_pool, task_name: str, *args: Any, **kwargs: Any):
+async def enqueue_job(task_name: str, *args: Any, **kwargs: Any):
     job_id = _infer_job_id(args, kwargs)
-    if _should_use_celery(task_name, job_id):
-        celery_task = _CELERY_TASK_MAP[task_name]
-        result = celery_task.delay(*args, **kwargs)
-        return SimpleNamespace(job_id=job_id or getattr(result, "id", None))
+    if job_id is None:
+        raise ValueError("enqueue_job requires a job_id as the first positional argument or keyword")
 
-    return await arq_pool.enqueue_job(task_name, *args, **kwargs)
+    celery_task = _get_celery_task(task_name)
+    result = celery_task.delay(*args, **kwargs)
+    return SimpleNamespace(job_id=job_id or getattr(result, "id", None))
 
 
 __all__ = ["enqueue_job"]

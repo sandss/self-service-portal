@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import redis.asyncio as redis
 
-from .deps import get_arq_pool
+from .deps import get_redis
 from .settings import settings
 from .catalog.routes import router as catalog_router
 from .task_queue import enqueue_job
@@ -133,14 +133,8 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-
-async def get_redis_client():
-    """Get Redis client for direct operations"""
-    return redis.from_url(settings.REDIS_URL)
-
-
 @app.post("/jobs", response_model=JobResponse)
-async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
+async def create_job(job_data: JobCreate):
     """Enqueue a new job"""
     job_id = str(uuid.uuid4())
     
@@ -153,7 +147,6 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
         if not (item_id and version):
             raise HTTPException(400, "item_id and version required for catalog")
         job = await enqueue_job(
-            arq_pool,
             "run_catalog_item",
             job_id,
             item_id=item_id,
@@ -182,7 +175,8 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
             "error": None
         }
         
-        await touch_job(arq_pool, job_status)
+        redis_client = await get_redis()
+        await touch_job(redis_client, job_status)
         return JobResponse(job_id=job.job_id)
     
     # Handle regular jobs
@@ -193,7 +187,7 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
     }
     
     # Enqueue the job
-    await enqueue_job(arq_pool, "example_long_task", job_id, payload=payload)
+    await enqueue_job("example_long_task", job_id, payload=payload)
     
     return JobResponse(job_id=job_id)
 
@@ -206,58 +200,54 @@ async def list_jobs(
     page_size: int = Query(20, ge=1, le=100)
 ):
     """List jobs with optional filtering and pagination"""
-    redis_client = await get_redis_client()
-    
-    try:
-        # Determine which index to use
-        if state:
-            index_key = f"jobs:index:state:{state}"
-        else:
-            index_key = "jobs:index"
-        
-        # Get total count
-        total = await redis_client.zcard(index_key)
-        
-        # Calculate pagination
-        start = (page - 1) * page_size
-        end = start + page_size - 1
-        
-        # Get job IDs (newest first)
-        job_ids = await redis_client.zrevrange(index_key, start, end)
-        
-        jobs = []
-        for raw_job_id in job_ids:
-            job_id = raw_job_id.decode() if isinstance(raw_job_id, bytes) else str(raw_job_id)
-            job_meta, _ = await fetch_job_metadata(redis_client, job_id)
+    redis_client = await get_redis()
 
-            if not job_meta:
+    # Determine which index to use
+    if state:
+        index_key = f"jobs:index:state:{state}"
+    else:
+        index_key = "jobs:index"
+
+    # Get total count
+    total = await redis_client.zcard(index_key)
+
+    # Calculate pagination
+    start = (page - 1) * page_size
+    end = start + page_size - 1
+
+    # Get job IDs (newest first)
+    job_ids = await redis_client.zrevrange(index_key, start, end)
+
+    jobs = []
+    for raw_job_id in job_ids:
+        job_id = raw_job_id.decode() if isinstance(raw_job_id, bytes) else str(raw_job_id)
+        job_meta, _ = await fetch_job_metadata(redis_client, job_id)
+
+        if not job_meta:
+            continue
+
+        job_dict = _normalize_job_meta(job_meta, job_id)
+
+        if q:
+            text = f"{job_dict.get('id', '')} {job_dict.get('type', '')}".lower()
+            if q.lower() not in text:
                 continue
 
-            job_dict = _normalize_job_meta(job_meta, job_id)
+        jobs.append(JobDetail(**job_dict))
 
-            if q:
-                text = f"{job_dict.get('id', '')} {job_dict.get('type', '')}".lower()
-                if q.lower() not in text:
-                    continue
-
-            jobs.append(JobDetail(**job_dict))
-        
-        return JobList(
-            items=jobs,
-            page=page,
-            page_size=page_size,
-            total=total
-        )
-    
-    finally:
-        await redis_client.aclose()
+    return JobList(
+        items=jobs,
+        page=page,
+        page_size=page_size,
+        total=total
+    )
 
 
 @app.get("/jobs/{job_id}", response_model=JobDetail)
 async def get_job(job_id: str):
     """Get job details by ID"""
-    redis_client = await get_redis_client()
-    
+    redis_client = await get_redis()
+
     try:
         job_meta, _ = await fetch_job_metadata(redis_client, job_id)
 
@@ -267,20 +257,18 @@ async def get_job(job_id: str):
         job_dict = _normalize_job_meta(job_meta, job_id)
 
         return JobDetail(**job_dict)
-    
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching job: {str(e)}")
-    finally:
-        await redis_client.aclose()
 
 
 @app.post("/jobs/{job_id}/retry", response_model=JobResponse)
-async def retry_job(job_id: str, arq_pool=Depends(get_arq_pool)):
+async def retry_job(job_id: str):
     """Retry a failed or cancelled job"""
     # Get current job details
-    redis_client = await get_redis_client()
+    redis_client = await get_redis()
     
     try:
         job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
@@ -302,12 +290,14 @@ async def retry_job(job_id: str, arq_pool=Depends(get_arq_pool)):
         
         # Create new job
         new_job_id = str(uuid.uuid4())
-        await enqueue_job(arq_pool, "example_long_task", new_job_id, payload=params)
-        
+        await enqueue_job("example_long_task", new_job_id, payload=params)
+
         return JobResponse(job_id=new_job_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrying job: {str(e)}")
     
-    finally:
-        await redis_client.aclose()
 
 
 @app.websocket("/ws/jobs")
@@ -352,7 +342,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.post("/dev/seed")
-async def seed_jobs(arq_pool=Depends(get_arq_pool)):
+async def seed_jobs():
     """Development endpoint to seed demo jobs"""
     demo_jobs = [
         {"report_type": "sales_report", "parameters": {"region": "US", "month": "2024-01"}},
@@ -365,14 +355,14 @@ async def seed_jobs(arq_pool=Depends(get_arq_pool)):
     job_ids = []
     for job_data in demo_jobs:
         job_id = str(uuid.uuid4())
-        await enqueue_job(arq_pool, "example_long_task", job_id, payload=job_data)
+        await enqueue_job("example_long_task", job_id, payload=job_data)
         job_ids.append(job_id)
     
     return {"message": f"Seeded {len(job_ids)} demo jobs", "job_ids": job_ids}
 
 
 @app.post("/provision/server", response_model=JobResponse)
-async def provision_server(request: ServerProvisionRequest, arq_pool=Depends(get_arq_pool)):
+async def provision_server(request: ServerProvisionRequest):
     """Provision a new server"""
     job_id = str(uuid.uuid4())
     
@@ -388,7 +378,7 @@ async def provision_server(request: ServerProvisionRequest, arq_pool=Depends(get
     }
     
     # Enqueue the server provisioning job
-    await enqueue_job(arq_pool, "provision_server_task", job_id, payload=payload)
+    await enqueue_job("provision_server_task", job_id, payload=payload)
     
     return JobResponse(job_id=job_id)
 

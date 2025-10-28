@@ -4,8 +4,8 @@ from typing import Optional
 import json
 import uuid
 from datetime import datetime
-from arq.connections import ArqRedis
-from ..deps import get_arq_pool
+from redis.asyncio import Redis
+from ..deps import get_redis
 from ..settings import settings
 from ..task_queue import enqueue_job
 
@@ -18,7 +18,7 @@ class GitImportRequest(BaseModel):
 router = APIRouter(prefix="/catalog/git", tags=["catalog-git"])
 
 @router.post("/webhook/github")
-async def github_webhook(request: Request, arq: ArqRedis = Depends(get_arq_pool)):
+async def github_webhook(request: Request, redis_client: Redis = Depends(get_redis)):
     """GitHub webhook endpoint for automatic catalog sync on tag push"""
     body = await request.json()
     repo = body.get("repository", {})
@@ -31,14 +31,13 @@ async def github_webhook(request: Request, arq: ArqRedis = Depends(get_arq_pool)
     tag = ref.split("/")[-1]
     job_id = str(uuid.uuid4())
     job = await enqueue_job(
-        arq,
         "sync_catalog_item_from_git",
         job_id,
         payload={"repo_url": repo_url, "ref": tag},
     )
     
     # Create job status record for dashboard tracking
-    await arq.set(
+    await redis_client.set(
         f"{settings.JOB_STATUS_PREFIX}{job.job_id}", 
         json.dumps({
             "state": "QUEUED",
@@ -54,7 +53,7 @@ async def github_webhook(request: Request, arq: ArqRedis = Depends(get_arq_pool)
     return {"queued": 1, "repo_url": repo_url, "ref": tag, "job_id": job.job_id}
 
 @router.post("/import")
-async def import_from_git(request: GitImportRequest, arq: ArqRedis = Depends(get_arq_pool)):
+async def import_from_git(request: GitImportRequest, redis_client: Redis = Depends(get_redis)):
     """
     Import catalog item from git repository.
     
@@ -103,7 +102,6 @@ async def import_from_git(request: GitImportRequest, arq: ArqRedis = Depends(get
     job_id = str(uuid.uuid4())
     
     job = await enqueue_job(
-        arq,
         "sync_catalog_item_from_git",
         job_id,
         payload={
@@ -147,8 +145,8 @@ async def import_from_git(request: GitImportRequest, arq: ArqRedis = Depends(get
             hash_data[key] = str(value)
     
     job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
-    await arq.hset(job_key, mapping=hash_data)
-    await arq.expire(job_key, settings.JOB_TTL)
+    await redis_client.hset(job_key, mapping=hash_data)
+    await redis_client.expire(job_key, settings.JOB_TTL)
     
     return {
         "queued": True, 

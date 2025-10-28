@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request, Depends, UploadFile, File, HTTPException, Body
-from arq.connections import ArqRedis
+from redis.asyncio import Redis
 from datetime import datetime
 import uuid
-from ..deps import get_arq_pool
+from ..deps import get_redis
 from ..task_queue import enqueue_job
 from .registry import (
     list_items, list_versions, get_descriptor, resolve_latest, upsert_version,
@@ -92,7 +92,7 @@ def api_local_import(body: dict = Body(...)):
 
 # Unified import endpoint - queues import job for async processing
 @router.post("/import")
-async def api_import(body: dict = Body(...), arq: ArqRedis = Depends(get_arq_pool)):
+async def api_import(body: dict = Body(...)):
     try:
         item_id = body.get("itemId")
         version = body.get("version")
@@ -129,7 +129,6 @@ async def api_import(body: dict = Body(...), arq: ArqRedis = Depends(get_arq_poo
         # Queue the import job for async processing
         job_id = str(uuid.uuid4())
         job = await enqueue_job(
-            arq,
             "import_catalog_item_task",
             job_id,
             payload={
@@ -156,11 +155,11 @@ async def api_import(body: dict = Body(...), arq: ArqRedis = Depends(get_arq_poo
 
 # Job status endpoint for tracking import progress
 @router.get("/import/status/{job_id}")
-async def api_import_status(job_id: str, arq: ArqRedis = Depends(get_arq_pool)):
+async def api_import_status(job_id: str, redis_client: Redis = Depends(get_redis)):
     """Get the status of an import job"""
     try:
         job_key = f"job:{job_id}"
-        job_data = await arq.hgetall(job_key)
+        job_data = await redis_client.hgetall(job_key)
         
         if not job_data:
             raise HTTPException(404, "Job not found")
@@ -200,7 +199,7 @@ async def api_import_status(job_id: str, arq: ArqRedis = Depends(get_arq_pool)):
 
 # Git webhook (simplified: expects JSON {repo_url, tags: ["item@1.2.3", ...]})
 @router.post("/git/webhook")
-async def api_git_webhook(req: Request, arq: ArqRedis = Depends(get_arq_pool)):
+async def api_git_webhook(req: Request):
     payload = await req.json()
     repo_url = payload.get("repo_url")
     tags = payload.get("tags", [])
@@ -210,7 +209,6 @@ async def api_git_webhook(req: Request, arq: ArqRedis = Depends(get_arq_pool)):
     for tag in tags:
         job_id = str(uuid.uuid4())
         job = await enqueue_job(
-            arq,
             "sync_catalog_item",
             job_id,
             payload={"repo_url": repo_url, "ref": tag},
@@ -319,14 +317,13 @@ def api_sync_registry():
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 @router.post("/sync/async")
-async def api_sync_registry_async(arq_pool: ArqRedis = Depends(get_arq_pool)):
+async def api_sync_registry_async():
     """Start an async sync job to sync registry with local filesystem"""
     import uuid
     job_id = str(uuid.uuid4())
     
     try:
         await enqueue_job(
-            arq_pool,
             "sync_catalog_registry_task",
             job_id,
             payload={
@@ -345,7 +342,7 @@ async def api_sync_registry_async(arq_pool: ArqRedis = Depends(get_arq_pool)):
         raise HTTPException(status_code=500, detail=f"Failed to queue sync job: {str(e)}")
 
 @router.get("/sync/status/{job_id}")
-async def api_get_sync_job_status(job_id: str, arq_pool: ArqRedis = Depends(get_arq_pool)):
+async def api_get_sync_job_status(job_id: str, redis_client: Redis = Depends(get_redis)):
     """Get the status of a sync job"""
     from api.settings import settings
     import json
@@ -353,10 +350,10 @@ async def api_get_sync_job_status(job_id: str, arq_pool: ArqRedis = Depends(get_
     job_key = f"{settings.JOB_STATUS_PREFIX}{job_id}"
     try:
         # Try to get as hash first
-        job_data = await arq_pool.hgetall(job_key)
+        job_data = await redis_client.hgetall(job_key)
         if not job_data:
             # Try as string
-            job_str = await arq_pool.get(job_key)
+            job_str = await redis_client.get(job_key)
             if job_str:
                 job_data = json.loads(job_str)
             else:

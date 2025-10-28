@@ -1,5 +1,4 @@
 import json
-import uuid
 from types import SimpleNamespace
 
 import fakeredis.aioredis
@@ -7,87 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api import main as main_module
-from api.deps import get_arq_pool
+from api import deps as deps_module
 from api.main import app
 from worker.celery_app import celery_app
-
-
-class FakeArqPool:
-    """Minimal ARQ-compatible interface backed by fakeredis."""
-
-    def __init__(self, server: fakeredis.aioredis.FakeServer):
-        self._server = server
-
-    def _client(self):
-        return fakeredis.aioredis.FakeRedis(server=self._server)
-
-    async def enqueue_job(self, job_name, *args, **kwargs):
-        job_id = kwargs.get("job_id")
-        if not job_id and args:
-            job_id = args[0]
-        if not job_id:
-            job_id = str(uuid.uuid4())
-
-        return SimpleNamespace(job_id=str(job_id))
-
-    async def hset(self, key, mapping):
-        redis_client = self._client()
-        try:
-            serialised = {}
-            for k, v in mapping.items():
-                if v is None:
-                    continue
-                if isinstance(v, (dict, list)):
-                    serialised[k] = json.dumps(v)
-                else:
-                    serialised[k] = str(v)
-
-            if serialised:
-                await redis_client.hset(key, mapping=serialised)
-        finally:
-            await redis_client.aclose()
-
-    async def expire(self, key, ttl):
-        redis_client = self._client()
-        try:
-            await redis_client.expire(key, ttl)
-        finally:
-            await redis_client.aclose()
-
-    async def zadd(self, key, mapping):
-        redis_client = self._client()
-        try:
-            await redis_client.zadd(key, mapping)
-        finally:
-            await redis_client.aclose()
-
-    async def zrem(self, key, member):
-        redis_client = self._client()
-        try:
-            await redis_client.zrem(key, member)
-        finally:
-            await redis_client.aclose()
-
-    async def publish(self, channel, message):
-        redis_client = self._client()
-        try:
-            await redis_client.publish(channel, message)
-        finally:
-            await redis_client.aclose()
-
-    async def hgetall(self, key):
-        redis_client = self._client()
-        try:
-            return await redis_client.hgetall(key)
-        finally:
-            await redis_client.aclose()
-
-    async def get(self, key):
-        redis_client = self._client()
-        try:
-            return await redis_client.get(key)
-        finally:
-            await redis_client.aclose()
+from worker import celery_tasks as celery_tasks_module
 
 
 @pytest.fixture(scope="session")
@@ -96,19 +18,39 @@ def fakeredis_server():
 
 
 @pytest.fixture
-def app_client(fakeredis_server):
-    fake_pool = FakeArqPool(fakeredis_server)
+def app_client(fakeredis_server, celery_eager_app, monkeypatch):
+    original_redis_client = deps_module._redis_client
+    original_main_get_redis = getattr(main_module, "get_redis", None)
+    original_deps_get_redis = deps_module.get_redis
 
-    original_get_redis_client = main_module.get_redis_client
-
-    async def override_get_redis_client():
+    async def override_get_redis():
         return fakeredis.aioredis.FakeRedis(server=fakeredis_server)
 
-    async def override_get_arq_pool():
-        return fake_pool
+    deps_module._redis_client = None
+    deps_module.get_redis = override_get_redis
+    if original_main_get_redis is not None:
+        main_module.get_redis = override_get_redis
 
-    app.dependency_overrides[get_arq_pool] = override_get_arq_pool
-    main_module.get_redis_client = override_get_redis_client
+    def make_fake_delay(task_name: str):
+        def _fake_delay(*args, **kwargs):
+            job_id = kwargs.get("job_id")
+            if job_id is None and args:
+                job_id = args[0]
+            return SimpleNamespace(id=str(job_id or f"test-{task_name}"))
+
+        return _fake_delay
+
+    for task_name in (
+        "example_long_task",
+        "run_catalog_item",
+        "provision_server_task",
+        "import_catalog_item_task",
+        "sync_catalog_registry_task",
+        "sync_catalog_item",
+        "sync_catalog_item_from_git",
+    ):
+        task = getattr(celery_tasks_module, task_name)
+        monkeypatch.setattr(task, "delay", make_fake_delay(task_name))
 
     client = TestClient(app)
     try:
@@ -116,7 +58,10 @@ def app_client(fakeredis_server):
     finally:
         client.close()
         app.dependency_overrides.clear()
-        main_module.get_redis_client = original_get_redis_client
+        deps_module._redis_client = original_redis_client
+        deps_module.get_redis = original_deps_get_redis
+        if original_main_get_redis is not None:
+            main_module.get_redis = original_main_get_redis
 
 
 @pytest.fixture
