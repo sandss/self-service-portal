@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     CELERY_BEAT_SCHEDULE_TZ: str = "UTC"
     CELERY_TASKS: list[str] = [
         "example_long_task",
+        "run_catalog_item",
+        "import_catalog_item_task",
+        "sync_catalog_registry_task",
+        "sync_catalog_item",
         "sync_catalog_item_from_git",
         "provision_server_task",
     ]

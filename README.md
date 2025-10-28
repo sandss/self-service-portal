@@ -398,6 +398,11 @@ pytest api/test_api.py -v
 - **Seamless navigation**: Fixed routing issues between pages
 - **Loading states**: Proper loading indicators and error handling
 - **Auto-refresh**: Jobs update in real-time without manual refresh
+
+### ⚙️ **Celery Task Migration**
+- **Unified dispatcher**: API `enqueue_job` now infers job IDs and dispatches catalog imports, registry syncs, and provision jobs through Celery when configured.
+- **Shared runners**: Worker implementations share core logic between Celery and legacy ARQ entrypoints, reducing drift.
+- **Explicit payloads**: All Celery-bound tasks receive a structured `payload` dict, ensuring consistent signatures across API endpoints, tests, and workers.
 - **Responsive design**: Works well on desktop and mobile
 
 ### 🐇 **Queue Modernization**

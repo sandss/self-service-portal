@@ -29,7 +29,13 @@ async def github_webhook(request: Request, arq: ArqRedis = Depends(get_arq_pool)
     if not ref.startswith("refs/tags/"):
         return {"queued": 0}  # ignore non-tag events
     tag = ref.split("/")[-1]
-    job = await enqueue_job(arq, "sync_catalog_item_from_git", repo_url=repo_url, ref=tag)
+    job_id = str(uuid.uuid4())
+    job = await enqueue_job(
+        arq,
+        "sync_catalog_item_from_git",
+        job_id,
+        payload={"repo_url": repo_url, "ref": tag},
+    )
     
     # Create job status record for dashboard tracking
     await arq.set(
@@ -96,13 +102,18 @@ async def import_from_git(request: GitImportRequest, arq: ArqRedis = Depends(get
     # Generate job ID
     job_id = str(uuid.uuid4())
     
-    job = await enqueue_job(arq, "sync_catalog_item_from_git", job_id, {
-        "repo_url": repo_url,
-        "item_name": item_name,
-        "source_type": source_type,
-        "source_ref": source_ref,
-        "ref": ref
-    })
+    job = await enqueue_job(
+        arq,
+        "sync_catalog_item_from_git",
+        job_id,
+        payload={
+            "repo_url": repo_url,
+            "item_name": item_name,
+            "source_type": source_type,
+            "source_ref": source_ref,
+            "ref": ref,
+        },
+    )
     
     # Create job status record for dashboard tracking
     job_data = {

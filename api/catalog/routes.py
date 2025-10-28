@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Depends, UploadFile, File, HTTPException, Body
 from arq.connections import ArqRedis
 from datetime import datetime
+import uuid
 from ..deps import get_arq_pool
 from ..task_queue import enqueue_job
 from .registry import (
@@ -14,7 +15,6 @@ from ..common.db import SessionLocal
 from .repository import CatalogRepo
 from .models import CatalogItem, CatalogVersion
 import os, tempfile, json, yaml, shutil
-from datetime import datetime
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -127,14 +127,19 @@ async def api_import(body: dict = Body(...), arq: ArqRedis = Depends(get_arq_poo
         validate_schema(schema)
         
         # Queue the import job for async processing
+        job_id = str(uuid.uuid4())
         job = await enqueue_job(
+            arq,
             "import_catalog_item_task",
-            item_id=item_id,
-            version=version,
-            manifest=manifest,
-            schema=schema,
-            ui_schema=ui_schema,
-            source="ui_import"
+            job_id,
+            payload={
+                "item_id": item_id,
+                "version": version,
+                "manifest": manifest,
+                "schema": schema,
+                "ui_schema": ui_schema,
+                "source": "ui_import",
+            },
         )
         
         return {
@@ -201,9 +206,17 @@ async def api_git_webhook(req: Request, arq: ArqRedis = Depends(get_arq_pool)):
     tags = payload.get("tags", [])
     if not repo_url or not tags:
         raise HTTPException(400, "repo_url and tags required")
-    for t in tags:
-        await enqueue_job(arq, "sync_catalog_item", repo_url=repo_url, ref=t)
-    return {"queued": len(tags)}
+    job_ids = []
+    for tag in tags:
+        job_id = str(uuid.uuid4())
+        job = await enqueue_job(
+            arq,
+            "sync_catalog_item",
+            job_id,
+            payload={"repo_url": repo_url, "ref": tag},
+        )
+        job_ids.append(job.job_id)
+    return {"queued": len(job_ids), "job_ids": job_ids}
 
 # List local catalog items
 @router.get("/local")
@@ -312,10 +325,15 @@ async def api_sync_registry_async(arq_pool: ArqRedis = Depends(get_arq_pool)):
     job_id = str(uuid.uuid4())
     
     try:
-        await enqueue_job(arq_pool, "sync_catalog_registry_task", job_id, {
-            "trigger": "manual",
-            "requested_at": datetime.utcnow().isoformat()
-        })
+        await enqueue_job(
+            arq_pool,
+            "sync_catalog_registry_task",
+            job_id,
+            payload={
+                "trigger": "manual",
+                "requested_at": datetime.utcnow().isoformat(),
+            },
+        )
         
         return {
             "success": True,

@@ -37,11 +37,17 @@ async def test_enqueue_job_routes_to_celery(monkeypatch):
     original_tasks = settings.CELERY_TASKS
     settings.CELERY_TASKS = ["example_long_task"]
     try:
-        result = await enqueue_job(dummy_arq, "example_long_task", "job-123", {"foo": "bar"})
+        result = await enqueue_job(
+            dummy_arq,
+            "example_long_task",
+            "job-123",
+            payload={"foo": "bar"},
+        )
     finally:
         settings.CELERY_TASKS = original_tasks
 
-    assert recorded["args"] == ("job-123", {"foo": "bar"})
+    assert recorded["args"] == ("job-123",)
+    assert recorded["kwargs"] == {"payload": {"foo": "bar"}}
     assert result.job_id == "job-123"
     assert dummy_arq.calls == []
 
@@ -62,7 +68,12 @@ async def test_provision_server_routes_to_celery(monkeypatch):
     try:
         payload = {"server_config": {"instance_type": "c5.large"}}
         job_id = "job-456"
-        result = await enqueue_job(dummy_arq, "provision_server_task", job_id, payload)
+        result = await enqueue_job(
+            dummy_arq,
+            "provision_server_task",
+            job_id,
+            payload=payload,
+        )
     finally:
         settings.CELERY_TASKS = original_tasks
 

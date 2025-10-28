@@ -6,14 +6,22 @@ from typing import Any
 from .settings import settings
 from worker.celery_tasks import (
     example_long_task,
+    import_catalog_item_task,
     provision_server_task,
+    run_catalog_item,
+    sync_catalog_item,
     sync_catalog_item_from_git,
+    sync_catalog_registry_task,
 )
 
 
 _CELERY_TASK_MAP = {
     "example_long_task": example_long_task,
+    "run_catalog_item": run_catalog_item,
     "provision_server_task": provision_server_task,
+    "import_catalog_item_task": import_catalog_item_task,
+    "sync_catalog_registry_task": sync_catalog_registry_task,
+    "sync_catalog_item": sync_catalog_item,
     "sync_catalog_item_from_git": sync_catalog_item_from_git,
 }
 

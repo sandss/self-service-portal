@@ -155,6 +155,7 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
         job = await enqueue_job(
             arq_pool,
             "run_catalog_item",
+            job_id,
             item_id=item_id,
             version=version,
             inputs=inputs,
@@ -192,7 +193,7 @@ async def create_job(job_data: JobCreate, arq_pool=Depends(get_arq_pool)):
     }
     
     # Enqueue the job
-    await enqueue_job(arq_pool, "example_long_task", job_id, payload)
+    await enqueue_job(arq_pool, "example_long_task", job_id, payload=payload)
     
     return JobResponse(job_id=job_id)
 
@@ -301,7 +302,7 @@ async def retry_job(job_id: str, arq_pool=Depends(get_arq_pool)):
         
         # Create new job
         new_job_id = str(uuid.uuid4())
-        await enqueue_job(arq_pool, "example_long_task", new_job_id, params)
+        await enqueue_job(arq_pool, "example_long_task", new_job_id, payload=params)
         
         return JobResponse(job_id=new_job_id)
     
@@ -364,7 +365,7 @@ async def seed_jobs(arq_pool=Depends(get_arq_pool)):
     job_ids = []
     for job_data in demo_jobs:
         job_id = str(uuid.uuid4())
-        await enqueue_job(arq_pool, "example_long_task", job_id, job_data)
+        await enqueue_job(arq_pool, "example_long_task", job_id, payload=job_data)
         job_ids.append(job_id)
     
     return {"message": f"Seeded {len(job_ids)} demo jobs", "job_ids": job_ids}
@@ -387,7 +388,7 @@ async def provision_server(request: ServerProvisionRequest, arq_pool=Depends(get
     }
     
     # Enqueue the server provisioning job
-    await enqueue_job(arq_pool, "provision_server_task", job_id, payload)
+    await enqueue_job(arq_pool, "provision_server_task", job_id, payload=payload)
     
     return JobResponse(job_id=job_id)
 
