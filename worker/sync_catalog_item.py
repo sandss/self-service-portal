@@ -31,18 +31,32 @@ def pack_dir(path: str) -> bytes:
     return bio.read()
 
 def load_descriptor_from_dir(path: str):
-    """Load manifest, schema, and ui from directory"""
+    """Load manifest, schema, ui, and any mapped schemas from directory"""
     manifest_path = os.path.join(path, "manifest.yaml")
     schema_path = os.path.join(path, "schema.json")
     ui_path = os.path.join(path, "ui.json")
-    
-    manifest = yaml.safe_load(open(manifest_path))
-    schema = json.load(open(schema_path))
+
+    with open(manifest_path, "r", encoding="utf-8") as handle:
+        manifest = yaml.safe_load(handle)
+
+    with open(schema_path, "r", encoding="utf-8") as handle:
+        schema = json.load(handle)
+
     ui = {}
     if os.path.exists(ui_path):
-        ui = json.load(open(ui_path))
-    
-    return manifest, schema, ui
+        with open(ui_path, "r", encoding="utf-8") as handle:
+            ui = json.load(handle)
+
+    additional_schemas: Dict[str, Any] = {}
+    schema_map = schema.get("x-schema-map", {}) if isinstance(schema, dict) else {}
+    for mapped_name in schema_map.values():
+        mapped_path = os.path.join(path, mapped_name)
+        if not os.path.exists(mapped_path):
+            continue
+        with open(mapped_path, "r", encoding="utf-8") as handle:
+            additional_schemas[mapped_name] = json.load(handle)
+
+    return manifest, schema, ui, additional_schemas
 
 def _default_now() -> datetime:
     return datetime.utcnow()
@@ -165,7 +179,7 @@ async def run_sync_catalog_item_from_git(
             if git_ref.replace("v", "").replace(".", "").replace("-", "").isalnum():
                 version = git_ref.lstrip("v")
             else:
-                manifest, _, _ = load_descriptor_from_dir(item_dir)
+                manifest, _, _, _ = load_descriptor_from_dir(item_dir)
                 version = manifest.get("version", "latest")
 
             job_meta.update({
@@ -175,7 +189,7 @@ async def run_sync_catalog_item_from_git(
             })
             await touch_job(redis_client, job_meta)
 
-            manifest, schema, ui = load_descriptor_from_dir(item_dir)
+            manifest, schema, ui, additional_schemas = load_descriptor_from_dir(item_dir)
 
             manifest_id = manifest.get("id") or manifest.get("name")
             manifest_version = manifest.get("version")
@@ -223,6 +237,7 @@ async def run_sync_catalog_item_from_git(
                     "path": f"{ITEMS_SUBDIR}/{item_id}",
                     "sync_timestamp": now().isoformat(),
                 },
+                additional_schemas=additional_schemas,
             )
 
             result = {
