@@ -420,3 +420,5 @@ test-reports/
 # Catalog and data directories
 catalog_local/
 data/
+mock-catalog-repos/*
+repos/*
